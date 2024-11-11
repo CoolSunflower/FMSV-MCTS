@@ -325,8 +325,8 @@ if __name__ == '__main__':
     create_clients()
 
     history = []
-    history.append([document_data + "Here is the workflow information: " + df.loc[0, 'information']])
-    history.append([document_data + "Here is the workflow information: " + df.loc[0, 'information']])
+    history.append([document_data + df.loc[0, 'information']])
+    history.append([document_data + df.loc[0, 'information']])
 
     df.loc[1:, 'output'] = df.loc[1:].apply(lambda row: func(row['signal_name'], row['information'], history, row['spec_name'], document_data), axis=1)
 
