@@ -23,8 +23,8 @@ times = time.time()
 def create_client(i):
     global clients
     client = OpenAI(
-        base_url="https://api.groq.com/openai/v1",
-        api_key=os.getenv('GROQ_API_KEY')
+        # base_url="https://api.groq.com/openai/v1",
+        api_key=os.getenv('API_KEY')
     )
 
     try:
@@ -64,6 +64,11 @@ def generate(prompt,history=[],timeout = 50,truncate=True,model="critic"):
     global clients
 
     time0 = time.time()
+
+    if truncate:
+        if(len(history)>2):
+            history = [history[0]] + [history[-1]]
+
     history_ = [{"role": "user" if i%2 == 0 else 'assistant', "content": h} for i,h in enumerate(history)]
 
     if model == "critic":
@@ -71,24 +76,27 @@ def generate(prompt,history=[],timeout = 50,truncate=True,model="critic"):
     elif model == "generator":
         llm = clients[0]
 
-    print
+    try:
+        completion = llm.chat.completions.create(
+            model = MODEL_NAME,
+            messages = history_ + [
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.95,
+            timeout = timeout
+        )
+    except Exception as e:
+        response = f"Exception: {e}"
+        print(f'[Error] {response}, retrying...')
+        raise Exception(response)
 
-    completion = llm.chat.completions.create(
-        model = MODEL_NAME,
-        messages = history_ + [
-            {"role": "user", "content": prompt}
-        ],
-        temperature=0.95,
-        timeout = timeout
-    )
-
-    print(f'response received! time taken: {time.time()-time0} seconds.')
+    print(f'[INFO] Response Received! Time Taken: {time.time()-time0} seconds.')
     return completion.choices[0].message.content, list(history) + [prompt,completion.choices[0].message.content]
 
 @retry()
 def cal_reward(question,ans,history):
     query = f'Question: {question}\nAnswer:{ans}\nAnalyze this Answer Strictly and Critic, point out every flaw for every possible imperfect to minus every possible score! You need to be very harsh and mean in calculating grades, and never give full marks to ensure that the marks are authoritative. \nOutput a score between [-100,+100]. \nResponse format:\n[Analysis]...[Score]...'
-    ret = generate(query, history, model="critic")
+    ret = generate(query, history, truncate=True, model="critic")
 
     score = ret[0].split('Score')[-1]
     scores = pattern.findall(score)
@@ -108,11 +116,11 @@ def get_weak_answer(question,history):
 
 def get_weak_hints(question,weak_answer,history=[]):
     query = f'{question}.\nSince we have a weak Answer from the specifications: {weak_answer}, could you provide me with a relection or feedback to correct this answer better? Analyze this Answer Strictly and Critic, point out every flaw for ervery possible imperfect to minus every possible score!\nLet\'s think step by step.'
-    return generate(query,history, model="critic")
+    return generate(query, history, model="critic")
 
 def get_better_answer(question,weak_answer,hint,history=[]):
     query = f'{question}.\nPlease refine your old answer: {weak_answer}.\n\nAccording to the Feedback: {hint}. The response should begin with [reasoning process]...[Verification]... and end with end with [Answer]\nLet\'s think step by step.'
-    return generate(query,history, model="generator")
+    return generate(query, history, model="generator")
 
 datas = []
 pattern = re.compile(r'\-?\d+\.\d+|\-?\d+')
@@ -186,9 +194,9 @@ def update_ucb(fathers, childs, to_explore, to_explore_reward, ucb_bank, C=1.4,g
         nodes_to_update = list(new_nodes_to_update)
 
 def step(query, weak_answer, history=[]):
-    print("\tGenerating Feedback from Node")
+    print("[MCTS] Generating Feedback from Node")
     hints,history = get_weak_hints(query,weak_answer,history=history)
-    print("\tGenerating a better set of SVAs")
+    print("[MCTS] Generating a better set of SVAs")
     answer,history = get_better_answer(query,weak_answer,hints,history=history)
     return hints,answer,history
 
@@ -223,14 +231,14 @@ def main_loop(query,max_iter=4, historyOG=[]):
         hints_reward_imp_bank[weak_answer].append((hints,reward,answer))
 
     ###get weak answer###
-    print("Generating Weak Answer Node")
+    print("[MCTS] Generating Weak Answer Node")
     weak_answer, history = get_weak_answer(query, historyOG[0])
     history_bank[weak_answer] = tuple(history)
     answers_list = [weak_answer,]
     to_explore = [weak_answer,]
     childs[weak_answer] = []
     fathers[weak_answer] = None
-    print("Sampling reward for weak answer")
+    print("[MCTS] Sampling reward for weak answer")
     sampling_reward(weak_answer, historyOG[1])
 
     hints_list = []
@@ -239,24 +247,24 @@ def main_loop(query,max_iter=4, historyOG=[]):
 
     for i in range(max_iter):
         # Print the rollout number
-        print('Iteration:', i)
+        print('[INFO] Iteration:', i)
 
         # Node Selection
-        print("Selecting Best Node and Resampling Reward")
+        print("[MCTS] Step 1: Selecting Best Node and Resampling Reward")
         filterd_to_explore = filter_mature_node(childs, to_explore, to_explore_reward)
         # Update reward calculated for node again
         weak_answer = get_best_explore_from_ucb(filterd_to_explore, ucb_bank)
         sampling_reward(weak_answer, historyOG[1])
 
         # Node Expansion
-        print("Expanding Node")
+        print("[MCTS] Step 2: Expanding Node")
         hints,answer,history = step(query,weak_answer,history=history_bank[weak_answer])
         add_to_hints_bank(hints,weak_answer)
         history_bank[answer] = tuple(history)
         to_explore.append(answer)
 
         # Node Evaluation
-        print("Node Evaluation")
+        print("[MCTS] Step 3: Node Evaluation")
         sampling_reward(answer, historyOG[1])
 
         # Auxiliary functions for updating tree
@@ -267,7 +275,7 @@ def main_loop(query,max_iter=4, historyOG=[]):
         hints_list.append(hints)
 
         # Backpropogation
-        print("Backpropogating through the tree\n")
+        print("[MCTS] Step 4: Backpropogating through the tree\n")
         update_ucb(fathers=fathers,childs=childs,to_explore=to_explore,to_explore_reward=to_explore_reward,ucb_bank=ucb_bank)
         add_to_hints_reward_imp_bank(hints,weak_answer,min(to_explore_reward.get(answer)) - min(to_explore_reward.get(weak_answer)),answer)#ucb_bank[answer] - ucb_bank[weak_answer]
 
@@ -295,11 +303,18 @@ def func(signal_name, signal_information, history, spec_name, document_data):
 
     with open(f'./output/json/{spec_name}_{signal_name}.json','w+') as f:
         json.dump(data,f,indent=4,ensure_ascii=False)
+
+    data = {
+        'query':query,
+        'to_explore_reward':to_explore_reward,
+        'hints_bank':hints_bank,
+        'history_bank':history_bank,
+    }
     
     # Use the entire data to generate a comprehensive set of SVAs using o1-preview
     client = OpenAI(api_key=os.getenv('API_KEY'))
     client.chat.completions.create(
-                model='o1-mini',
+                model='gpt-4o',
                 messages=[
                     {"role": "system", "content": COMBINER_PROMPT}
                 ],
@@ -309,7 +324,7 @@ def func(signal_name, signal_information, history, spec_name, document_data):
     completion = client.chat.completions.create(
         model = MODEL_NAME,
         messages = [
-            {"role": "user", "content": f"Combine all this data {data} along with your own reasoning, and produce a set of COMPLETE, CONSISTENT and CORRECT SVAs. Here is the signal name {signal_name}, all the information from the specification {document_data}, and particular information for the signal: {signal_information}."}
+            {"role": "user", "content": f"Combine all this data {data} along with your own reasoning, and produce a set of COMPLETE, CONSISTENT and CORRECT SVAs. Here is the signal name {signal_name}."}
         ],
         temperature=0.95,
     )
@@ -328,8 +343,6 @@ if __name__ == '__main__':
     history.append([document_data + df.loc[0, 'information']])
     history.append([document_data + df.loc[0, 'information']])
 
-    df.loc[1:, 'output'] = df.loc[1:].apply(lambda row: func(row['signal_name'], row['information'], history, row['spec_name'], document_data), axis=1)
-
-    print(df.head())
+    df.loc[6:7, 'output'] = df.loc[6:7].apply(lambda row: func(row['signal_name'], row['information'], history, row['spec_name'], document_data), axis=1)
     
     df.to_csv(f'./output/{spec_name}.csv')
