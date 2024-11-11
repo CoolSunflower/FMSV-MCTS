@@ -27,9 +27,32 @@ hpdmc,NA,"Here is the mapping information:
 [dqs_psincdec]: DQS Phase Shift Increment/Decrement. Allows fine adjustments to the phase shift of DQS.
 [dqs_psdone]: DQS Phase Shift Done. Indicates when the DQS phase shift adjustment is complete.
 [pll_stat]: PLL Status. Monitors the Phase-Locked Loop (PLL) status, ensuring stable clock signals for SDRAM operations.
-Here is the workflow information:
-
-"
+Here is the architecture information:
+The HPDMC (High-Performance Dynamic Memory Controller) architecture is designed to manage high-bandwidth DDR SDRAM access for applications like live video processing. The architecture is modular and is divided into several interconnected components, each with specific responsibilities and functionalities, summarized as follows:
+### 1. **Control Interface**
+   - The control interface manages the operational mode, timing configurations, and initialization of the SDRAM. This interface is accessible through a dedicated CSR (Control and Status Register) bus, separate from the data bus. This separation reduces FPGA resource usage and avoids timing issues on the system bus.
+   - **Bypass Mode**: The control interface enables bypass mode, allowing the CPU to directly control the SDRAM command and address bus. This mode is specifically used during the SDRAM initialization sequence, allowing low-level control over each SDRAM pin, such as `sdram_cs_n`, `sdram_we_n`, and `sdram_ras_n`. In this setup, HPDMC doesn't provide a hardware state machine for initialization, leaving the CPU responsible for this task.
+### 2. **SDRAM Management Unit**
+   - This unit acts as the core state machine of HPDMC, managing the SDRAM bus when not in bypass mode. The management unit is responsible for issuing precharge, activation, periodic refresh, and read/write commands to the SDRAM.
+   - **Timing Parameters**: The management unit retrieves critical timing parameters, including `tRP` (Row Precharge time), `tRCD` (Row to Column Delay), `tREFI` (Refresh Interval), and `tRFC` (Refresh Cycle time), from the control interface’s timing register. These parameters help ensure the SDRAM operates within required specifications.
+   - **Read/Write Protocol**: The management unit interacts with a protocol similar to Wishbone, where a strobe input indicates when a command should be processed. Upon completion, an acknowledgment signal is sent back, allowing the next command to be issued on the following clock cycle.
+### 3. **Data Path Controller**
+   - This controller is responsible for managing data flow to and from the SDRAM, specifically handling direction switching on data lines and delaying commands when necessary to avoid conflicts. It receives `read_safe`, `write_safe`, and `precharge_safe` signals from the SDRAM management unit to prevent data collisions.
+   - **DQS and Delay Management**: Data is synchronized using IDDR and ODDR primitives to meet timing requirements. When writing to the SDRAM, data is sent on both the rising and falling edges of the system clock (`sys_clk`). The DQS clock (data strobe) signal is typically delayed by 90 degrees to provide optimal timing alignment, a process managed by the delay register.
+### 4. **Data Path**
+   - This component handles data capture and output, managing bidirectional data flow to the SDRAM. It is designed to simplify timing by using a synchronized DQS phase shift, with the ability to delay data for proper alignment. When reading data, the IDELAY primitives introduce a one-quarter clock cycle delay to align data with the clock edges.
+   - **Clocking Support**: The `sys_clk` and `dqs_clk` signals drive the IDDR and ODDR primitives, while `dqs_psen`, `dqs_psincdec`, and `dqs_psdone` support phase shift adjustments in the DCM, helping maintain precise data alignment.
+### 5. **Bus Interface**
+   - The bus interface is responsible for sending commands from the Fast Memory Link (FML) bus to the SDRAM management unit. This interface manages command timing and synchronization, ensuring that SDRAM transactions adhere to the proper sequence.
+### 6. **System Register and Bypass Register**
+   - **System Register**: Configured by the CPU, the system register controls SDRAM command bus operations, such as enabling bypass mode and setting or clearing the `sdram_cke` (Clock Enable) signal.
+   - **Bypass Register**: Enables low-level control of SDRAM commands during initialization, where the CPU can directly issue commands to `sdram_cs_n`, `sdram_we_n`, `sdram_ras_n`, and `sdram_cas_n`. Each command only lasts one clock cycle before returning to an inactive state.
+### 7. **Delay Register and Phase Shift Control**
+   - The delay register controls IDELAY elements, managing timing adjustments for data lines during read operations. Phase shift control is managed via `dqs_psen`, `dqs_psincdec`, and `dqs_psdone` signals, allowing fine-tuning of the DQS clock's phase to align with data capture requirements.
+### 8. **Digital Clock Manager (DCM)**
+   - The DCM provides differential clocking for SDRAM and introduces a 90-degree phase shift for the DQS clock. It is a critical element in maintaining timing integrity for high-speed operations and is monitored through the `pll_stat` signal, which provides feedback on clock stability and readiness.
+### Summary
+The HPDMC architecture offers a flexible, high-performance memory control solution, balancing high-speed data access with precise timing control. Its modular design allows for direct CPU access during initialization and high-bandwidth operations via FML. Through careful synchronization of clocks, delay elements, and phase adjustments, the HPDMC is equipped to manage DDR SDRAM in timing-sensitive applications like live video processing, ensuring data integrity and stability across operations."
 hpdmc,sys_clk,"Here’s the extracted information on the `sys_clk` (System clock) signal based on the provided design specification:
 **[Signal name]:** sys_clk
 **[Description]:**
