@@ -1,5 +1,5 @@
-MODEL_NAME  = 'llama-3.1-8b-instant'
-# MODEL_NAME = 'gpt-3.5-turbo-0125'
+# MODEL_NAME  = 'llama-3.2-11b-text-preview'
+MODEL_NAME = 'gpt-4o'
 
 SVA_SYSTEM_PROMPT = '''
 Please act as profession VLSI verification engineer. You will be provided with a specification and workflow information.
