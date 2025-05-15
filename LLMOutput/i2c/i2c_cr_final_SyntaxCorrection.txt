@@ -1,0 +1,72 @@
+<think>
+Okay, let's tackle this step by step. The user provided several SystemVerilog assertions that have syntax issues, and they want them corrected based on the I2C-Master Core documentation. The main issues seem to be related to signal names and syntax errors.
+
+First, looking at the error messages, the main problems are undeclared signals. For example, 'hclk' isn't declared, but according to the documentation, the WISHBONE interface uses 'wb_clk_i' as the master clock. So I need to replace 'hclk' with 'wb_clk_i' in all assertions.
+
+Next, signals like 'sda_padoen_o' and 'scl_padoen_o' were mentioned in the assertions, but the note says these are renamed to 'sda_pad_oe' and 'scl_pad_oe' in the Verilog code. So those substitutions are necessary.
+
+Looking at the Command Register (cr) description, the bits are defined as follows:
+- Bit 7: STA (Start)
+- Bit 6: STO (Stop)
+- Bit 5: RD (Read)
+- Bit 4: WR (Write)
+- Bit 3: ACK (Acknowledge control)
+- Bit 0: IACK (Interrupt acknowledge)
+
+In the original assertions, the user referenced cr[3] and cr[5]. Since cr is an 8-bit register, bit 3 is the ACK bit, and bit 5 is the RD bit. So the conditions in the properties should check these bits correctly.
+
+For the ACK_Low and ACK_High properties, the original code used cr[3] and cr[5]. The corrected assertions should reference the correct bits. Also, since the Command Register bits are cleared automatically, the conditions should check if the RD bit (cr[5]) is set along with the ACK bit (cr[3]).
+
+Another issue is the use of 'sda_padoen_o' which should be 'sda_pad_oe'. The output enable signals are active low, so when the master is driving SDA low (ACK), 'sda_pad_oe' should be 0 (enabled). When sending NACK, 'sda_pad_oe' should be 1 (disabled), allowing the line to be pulled high.
+
+Also, the original assertions might have syntax errors like missing semicolons or incorrect operators. For example, in the ACK_Low property, the implication operator |-> should be used correctly, and the signal names should be adjusted.
+
+I'll go through each assertion, correct the signal names, adjust the bit references for the cr register, and ensure the syntax is valid. I'll also make sure that all referenced signals exist in the documentation, like wb_clk_i, cr, sda_pad_oe, etc.
+
+For example, the first assertion had 'hclk', which should be 'wb_clk_i'. The 'sda_padoen_o' becomes 'sda_pad_oe'. The condition (cr[3] == 0 && cr[5]) checks if ACK is set to 0 (send ACK) and RD bit is active. The implication is that sda_pad_oe should be 0, meaning the master is driving SDA low.
+
+Similarly, for ACK_High, when cr[3] is 1 (NACK) during a read, sda_pad_oe should be 1, so the master isn't driving SDA, allowing it to be high.
+
+I'll also check the syntax of each assertion, making sure properties are properly defined and asserted. Any typos or incorrect operators will be fixed. Since the user mentioned not to use 'else' and not to create new signals, I'll stick to the signals provided in the documentation.
+
+Finally, I'll ensure that all assertions are within a module if necessary, but since the user just wants the corrected assertions, I'll present them as standalone properties with the correct syntax.
+</think>
+
+```systemverilog
+// Corrected assertions for I2C-Master Core signals
+
+// Assertion for AD signal width (32 bits)
+assert_AD_Width: assert property (@(posedge wb_clk_i) ($bits(ad) == 32));
+
+// Assertion for C_BE signal width (4 bits)
+assert_CBE_Width: assert property (@(posedge wb_clk_i) ($bits(c_be) == 4));
+
+// ACK control assertions
+property ACK_Low;
+  @(posedge wb_clk_i)
+  (cr[3] == 1'b0 && cr[5]) |-> !sda_pad_oe;
+endproperty
+assert_ACK_Low: assert property (ACK_Low);
+
+property ACK_High;
+  @(posedge wb_clk_i)
+  (cr[3] == 1'b1 && cr[5]) |-> sda_pad_oe;
+endproperty
+assert_ACK_High: assert property (ACK_High);
+
+// Command register bit stability
+localparam CR_WRITABLE_BITS = 8'hB1; // STA(7), STO(6), RD(5), WR(4), ACK(3), IACK(0)
+
+property CR_ReservedBitsZero;
+  @(posedge wb_clk_i)
+  (wb_we_i && wb_adr_i == 3'h4) |-> (wb_dat_i & ~CR_WRITABLE_BITS) == 0;
+endproperty
+assert_CR_ReservedBitsZero: assert property (CR_ReservedBitsZero);
+
+// Command auto-clear functionality
+property CR_AutoClear;
+  @(posedge wb_clk_i)
+  cr[7] |=> !cr[7]; // STA bit auto-clears after 1 cycle
+endproperty
+assert_CR_AutoClear: assert property (CR_AutoClear);
+```

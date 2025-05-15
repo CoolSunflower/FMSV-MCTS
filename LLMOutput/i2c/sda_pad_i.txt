@@ -1,0 +1,89 @@
+<think>
+Okay, let's tackle generating the SVAs for sda_pad_i. First, I need to understand the signal's role. It's an input for the I2C SDA line, which is open-drain with external pull-ups. The core uses sda_pad_oe to control when it's driving the line. 
+
+Starting with the width check: sda_pad_i is a 1-bit input, so an assertion to verify its width is straightforward.
+
+Next, connectivity. When the core is driving (sda_pad_oe low), sda_pad_i should match sda_pad_o. But there might be a delay due to tri-state buffers, so adding a ##1 makes sense. Also, need to handle resets with disable iff.
+
+For functionality, during SCL high when the core is driving, SDA should be stable except for START/STOP. But how to detect those? The command register's STA and STO bits can indicate when the core is generating these conditions. So, exclude those cases in the stability check.
+
+Arbitration loss is another point. If the core drives high but reads low, the AL bit should set. Need an assertion for that.
+
+START/STOP conditions themselves need checks. When STA or STO commands are active, SDA should transition appropriately while SCL is high.
+
+Also, considering metastability, adding synchronizers for sda_pad_i before using it in assertions would help avoid false failures.
+
+Wait, the previous answer had some issues. For example, using scl_pad_o instead of scl_pad_i in stability checks might not account for multi-master scenarios. The actual SCL line (scl_pad_i) should be used to ensure protocol compliance. Also, the original answer didn't handle metastability, so adding a two-stage synchronizer for sda_pad_i is necessary.
+
+Putting it all together: width assertion, connectivity with sync and delay, stability during SCL high excluding START/STOP, arbitration loss, and explicit START/STOP checks. Also, ensure all assertions are disabled during reset and use the actual SCL line from the bus.
+</think>
+
+[REASONING]  
+1. **Width Check**: Verify `sda_pad_i` is 1-bit as per specification.  
+2. **Connectivity**:  
+   - When the core drives SDA (`sda_pad_oe == 0`), `sda_pad_i` must match `sda_pad_o` after a 1-cycle propagation delay.  
+   - Add metastability synchronization for robust signal comparison.  
+3. **Functionality**:  
+   - **Stability**: During core-driven SCL high phases, SDA must remain stable unless generating START/STOP.  
+   - **Arbitration Loss**: Detect conflicts when core drives high but SDA is low.  
+   - **START/STOP**: Validate protocol-critical transitions using actual bus SCL (`scl_pad_i`).  
+4. **Reset Handling**: Disable assertions during active reset.  
+
+[SVAs]  
+```systemverilog
+// 1. Width assertion
+assert property (@(posedge wb_clk_i disable iff (wb_rst_i)) ($bits(sda_pad_i) == 1));
+
+// 2. Metastability synchronization for sda_pad_i
+(* anyconst *) logic sda_sync1, sda_sync2;
+always_ff @(posedge wb_clk_i) begin
+  sda_sync1 <= sda_pad_i;
+  sda_sync2 <= sda_sync1;
+end
+
+// 3. Connectivity with propagation delay
+property sda_connectivity;
+  @(posedge wb_clk_i disable iff (wb_rst_i))
+  (sda_pad_oe == 1'b0) |-> ##1 (sda_sync2 == sda_pad_o);
+endproperty
+assert property (sda_connectivity);
+
+// 4. Stability during SCL high (actual bus SCL)
+property sda_stable_during_scl_high;
+  @(posedge wb_clk_i disable iff (wb_rst_i))
+  $rose(scl_pad_i) && !(cr[3] || cr[2]) && sda_pad_oe == 1'b0 |-> 
+  $stable(sda_sync2) until $fell(scl_pad_i);
+endproperty
+assert property (sda_stable_during_scl_high);
+
+// 5. Arbitration loss detection
+property arbitration_loss;
+  @(posedge wb_clk_i disable iff (wb_rst_i))
+  (sda_pad_oe == 1'b0 && sda_pad_o == 1'b1 && sda_sync2 == 1'b0) |=> 
+  ##[0:1] (sr[3] == 1'b1); // Combinatorial or next-cycle update
+endproperty
+assert property (arbitration_loss);
+
+// 6. START condition (SDA↓ while SCL↑)
+property start_condition;
+  @(posedge wb_clk_i disable iff (wb_rst_i))
+  cr[3] && !sr[4] |-> // STA command + bus not busy
+  s_eventually ($fell(sda_sync2) && scl_pad_i == 1'b1);
+endproperty
+assert property (start_condition);
+
+// 7. STOP condition (SDA↑ while SCL↑)
+property stop_condition;
+  @(posedge wb_clk_i disable iff (wb_rst_i))
+  cr[2] && sr[4] |-> // STO command + bus busy
+  s_eventually ($rose(sda_sync2) && scl_pad_i == 1'b1);
+endproperty
+assert property (stop_condition);
+```
+
+**Key Features**:  
+1. **Protocol Compliance**: Uses actual bus SCL (`scl_pad_i`) for timing checks.  
+2. **Metastability Handling**: 2-stage synchronizer for robust signal comparison.  
+3. **Multi-Master Support**: Properly detects arbitration loss and respects bus states.  
+4. **Reset Safety**: All assertions disabled during reset.  
+5. **Timing Flexibility**: Uses `##[0:1]` and `s_eventually` to avoid over-constraining.

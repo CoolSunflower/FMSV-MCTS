@@ -1,0 +1,78 @@
+<think>
+Okay, let's tackle generating the SVAs for scl_pad_o. First, I need to understand the signal's role. It's the SCL line output for I2C, which is open-drain. So, the core can only drive it low or let it float (high-Z). The key points from the spec are:
+
+1. **Width**: It's a 1-bit signal. So, a static assertion checks that.
+2. **Connectivity**: When the output enable (scl_pad_oe) is 0, scl_pad_o must be 0 because the core actively drives it low. If scl_pad_oe is 1, the core isn't driving, so scl_pad_o should be in high-Z, but that's handled externally.
+3. **Functionality**:
+   - **Never High**: Since it's open-drain, scl_pad_o should never be driven high. So, an assertion that it's never 1.
+   - **START/STOP Conditions**: During START or STOP, SCL must be high. The core should release SCL (scl_pad_oe=1) so the line is pulled up. So, check that when a START or STOP command is issued (cr.STA or cr.STO rises), scl_pad_oe becomes 1.
+   - **Arbitration Lost**: If arbitration is lost (sr.AL=1), the core stops driving SCL, so scl_pad_oe should be 1.
+   - **Core Disabled**: When disabled (ctr.EN=0), scl_pad_oe should be 1.
+   - **Clock Stretching**: If the slave holds SCL low, the core should release it (scl_pad_oe=1) until SCL goes high again.
+
+I also need to handle resets properly using disable iff. Make sure all assertions reference the correct hierarchical paths if needed, like i2c_master_top.sr.AL. Avoid using undefined signals and focus strictly on scl_pad_o's behavior.
+</think>
+
+[REASONING]  
+1. **Width Check**: Mandatory for 1-bit SCL line.  
+2. **Open-Drain Rule**: Core must never drive SCL high.  
+3. **START/STOP Compliance**: Core releases SCL during START/STOP generation.  
+4. **Arbitration Handling**: Core stops driving SCL on arbitration loss.  
+5. **Clock Stretching**: Core releases SCL when slave holds it low.  
+6. **Reset/Disable Handling**: Core doesn’t drive SCL during resets or when disabled.  
+
+[SVAs]  
+```systemverilog
+// Width assertion (compile-time check)
+static assert final ($bits(scl_pad_o) == 1);
+
+// Open-drain fundamental rule
+property SCL_NeverHigh;
+  @(posedge wb_clk_i) (scl_pad_o !== 1'b1); // Never actively driven high
+endproperty
+assert property (SCL_NeverHigh);
+
+// Core drives low only when output enabled
+property SCL_DriveLowWhenEnabled;
+  @(posedge wb_clk_i) disable iff (wb_rst_i || arst_i)
+  (scl_pad_oe == 0) |-> (scl_pad_o == 0);
+endproperty
+assert property (SCL_DriveLowWhenEnabled);
+
+// Release SCL during START/STOP commands
+property SCL_ReleaseStartStop;
+  @(posedge wb_clk_i) disable iff (wb_rst_i || arst_i)
+  ($rose(i2c_master_top.cr.STA) || $rose(i2c_master_top.cr.STO)) 
+  |-> ##[1:5] (scl_pad_oe == 1);
+endproperty
+assert property (SCL_ReleaseStartStop);
+
+// Arbitration lost handling
+property SCL_ArbitrationLost;
+  @(posedge wb_clk_i) disable iff (wb_rst_i || arst_i)
+  $rose(i2c_master_top.sr.AL) |-> ##[1:3] (scl_pad_oe == 1);
+endproperty
+assert property (SCL_ArbitrationLost);
+
+// Clock stretching compliance
+property SCL_ClockStretchHandling;
+  @(posedge wb_clk_i) disable iff (wb_rst_i || arst_i)
+  (scl_pad_oe == 0 && scl_pad_i == 0) // Core driving but SCL held low
+  |-> ##1 (scl_pad_oe == 1)[*1:$] until (scl_pad_i == 1); // Release until SCL high
+endproperty
+assert property (SCL_ClockStretchHandling);
+
+// Core disabled state
+property SCL_CoreDisabled;
+  @(posedge wb_clk_i) disable iff (wb_rst_i || arst_i)
+  (!i2c_master_top.ctr.EN) |-> (scl_pad_oe == 1);
+endproperty
+assert property (SCL_CoreDisabled);
+```  
+
+**Key Improvements Over Previous Versions**:  
+1. **Strict Focus on scl_pad_o**: All assertions directly relate to its behavior.  
+2. **Protocol Compliance**: Explicit checks for START/STOP, arbitration, and clock stretching.  
+3. **Exact Timing**: Uses bounded delays (##[1:5], ##[1:3]) aligned with I2C clock phases.  
+4. **Reset Handling**: Proper `disable iff` clauses for both synchronous and asynchronous resets.  
+5. **Hierarchical Signal Access**: Uses full paths (e.g., `i2c_master_top.sr.AL`) to avoid undefined signal errors.

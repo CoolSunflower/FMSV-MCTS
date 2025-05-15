@@ -1,0 +1,35 @@
+<think>
+Okay, let's tackle this problem. The user wants me to extract all unique and valid SystemVerilog assertions related to the signal "mtime" from the provided list. They emphasized retaining as many assertions as possible, including checking the width of mtime.
+
+First, I'll look at the given assertions. The first one is about the bit width: `assert property (@(posedge clk_i) $bits(mtime) == 64);` This directly checks that mtime is 64 bits, which aligns with the documentation mentioning a 64-bit timer. So this should definitely be included.
+
+The next two assertions are properties `mtime_increment_p` and `mtime_hold_p`. Both relate to how mtime updates. The increment property checks that when active and tick occur, mtime_d is mtime plus step. The hold property checks that when active but no tick, mtime_d remains the same. These both are valid as per the design details where mtime increments by step on a tick. Since they both reference mtime, they should be kept.
+
+The fourth assertion is `mtime_intr_p`, which triggers an interrupt when mtime >= mtimecmp[0]. The documentation states that an interrupt is generated when the counter reaches or exceeds mtimecmp. However, the property uses mtimecmp[0], which might be specific to a configuration with multiple timers per hart. But the current IP is fixed to one hart and one timer, so this should be valid. So this assertion is also relevant.
+
+Now, checking for uniqueness. All four assertions are distinct in their conditions and checks. None of them are duplicates. The user also wants to ensure that the width assertion is present. Since it's already there, no need to add anything else.
+
+No modifications are needed to the assertions themselves, just extract them. The user specified to not modify the assertions, so they should be copied as-is. All four assertions are valid for mtime, covering width, increment behavior, hold behavior, and interrupt triggering. So all four should be included.
+</think>
+
+```systemverilog
+assert property (@(posedge clk_i) $bits(mtime) == 64);
+
+property mtime_increment_p;
+  @(posedge clk_i) disable iff (!rst_ni)
+  (active && tick) |-> (mtime_d == (mtime + step));
+endproperty
+assert property (mtime_increment_p);
+
+property mtime_hold_p;
+  @(posedge clk_i) disable iff (!rst_ni)
+  (active && !tick) |-> (mtime_d == mtime);
+endproperty
+assert property (mtime_hold_p);
+
+property mtime_intr_p;
+  @(posedge clk_i) disable iff (!rst_ni)
+  (mtime >= mtimecmp[0]) |-> intr[0];
+endproperty
+assert property (mtime_intr_p);
+```

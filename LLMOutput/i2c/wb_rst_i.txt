@@ -1,0 +1,105 @@
+<think>
+Okay, let's tackle generating the SVAs for wb_rst_i. First, I need to thoroughly understand the specifications and the provided reasoning. The signal wb_rst_i is a synchronous reset, active high, part of the WISHBONE interface. It works with wb_clk_i and should reset the core's registers and outputs to their default states.
+
+Starting with the width check. The spec says it's a 1-bit input, so an assertion to confirm that makes sense. Even though it's defined as 1-bit, including this check ensures no unintended changes.
+
+Next, the synchronous behavior. Since it's a synchronous reset, all resets should happen on the rising edge of wb_clk_i. Each register (ctr, sr, prer, txr, rxr, cr) has specific reset values. For example, ctr resets to 0x00, prer to 0xFFFF. I'll need assertions that check these values when wb_rst_i is active.
+
+The output enables scl_pad_oe and sda_pad_oe should be high during reset to tri-state the lines. The spec's code example uses active-high for output enable, so asserting they are 1 during reset is correct.
+
+For the WISHBONE outputs like wb_dat_o, wb_ack_o, and wb_inta_o, they should be in their reset states (0x00, 0, 0 respectively) when reset is active. However, if the Wishbone interface is active (wb_cyc_i and wb_stb_i high), wb_dat_o might reflect a register read. But during reset, all registers are in their default states, so wb_dat_o should still be 0x00 regardless. The previous conditional check might be too restrictive, so I'll remove that condition.
+
+I also need to ensure that the Status Register's AL bit (sr[2]) is 0 during reset. Additionally, other bits in sr should be checked, but since the entire sr resets to 0x00, a single check for sr == 8'h00 covers all bits.
+
+The prescale register (prer) should remain at 0xFFFF throughout the reset. Using 'throughout' ensures stability during the reset period.
+
+Tri-state data lines (scl_pad_o, sda_pad_o) are driven to 0 during reset to avoid floating values, even though the output enables are high. This is a safety measure, so including those checks is good practice.
+
+Finally, mutual exclusivity with arst_i isn't required here since the focus is on wb_rst_i, and the user didn't include arst_i in the signals to check.
+
+Putting it all together, I'll structure the SVAs into width, connectivity, and functionality checks, ensuring each aspect is covered without redundancy or syntax errors.
+</think>
+
+[REASONING]  
+1. **Width Check**: Verify 1-bit signal integrity.  
+2. **Synchronous Reset Behavior**: Ensure registers reset to spec-defined values *immediately* at clock edge.  
+3. **Tri-State Control**: Confirm output enables disable SCL/SDA drivers during reset.  
+4. **WISHBONE Protocol Compliance**: Validate outputs remain inactive during reset.  
+5. **Stability Checks**: Guarantee registers maintain reset values throughout active reset.  
+
+[SVAs]  
+```systemverilog
+///////////////////////////
+// [Width] Assertions    //
+///////////////////////////
+assert property (@(posedge wb_clk_i) $bits(wb_rst_i) == 1);
+
+/////////////////////////////
+// [Connectivity] Checks   //
+/////////////////////////////
+// Tri-state enable verification
+property scl_oe_reset;
+  @(posedge wb_clk_i) wb_rst_i |-> scl_pad_oe; // Active-high OE = tri-state
+endproperty
+assert property (scl_oe_reset);
+
+property sda_oe_reset;
+  @(posedge wb_clk_i) wb_rst_i |-> sda_pad_oe;
+endproperty
+assert property (sda_oe_reset);
+
+// Wishbone interface outputs
+property wb_outputs_reset;
+  @(posedge wb_clk_i) wb_rst_i |-> (wb_ack_o == 0 && wb_inta_o == 0);
+endproperty
+assert property (wb_outputs_reset);
+
+////////////////////////////////
+// [Functionality] Checks     //
+////////////////////////////////
+// Atomic register resets
+property ctr_reset;
+  @(posedge wb_clk_i) wb_rst_i |-> (ctr == 8'h00);
+endproperty
+assert property (ctr_reset);
+
+property prer_reset;
+  @(posedge wb_clk_i) wb_rst_i |-> (prer == 16'hFFFF);
+endproperty
+assert property (prer_reset);
+
+property full_status_reset;
+  @(posedge wb_clk_i) wb_rst_i |-> (sr == 8'h00); // Covers AL/Busy/TIP/IF
+endproperty
+assert property (full_status_reset);
+
+// Data bus stability
+property wb_data_reset;
+  @(posedge wb_clk_i) wb_rst_i |-> (wb_dat_o == 8'h00);
+endproperty
+assert property (wb_data_reset);
+
+// Sustained reset stability
+property sustained_prer_reset;
+  @(posedge wb_clk_i) $rose(wb_rst_i) |=> (prer == 16'hFFFF) throughout wb_rst_i;
+endproperty
+assert property (sustained_prer_reset);
+
+// Physical line safety
+property scl_driven_low;
+  @(posedge wb_clk_i) wb_rst_i |-> (scl_pad_o == 1'b0);
+endproperty
+assert property (scl_driven_low);
+
+property sda_driven_low;
+  @(posedge wb_clk_i) wb_rst_i |-> (sda_pad_o == 1'b0);
+endproperty
+assert property (sda_driven_low);
+```
+
+**Key Improvements Over Previous Versions**:  
+1. Removed redundant conditional check for `wb_dat_o`  
+2. Added full status register coverage via `sr == 8'h00`  
+3. Used standard `throughout` operator for stability checks  
+4. Explicit physical line safety checks prevent floating values  
+5. Atomic checks for all critical registers with spec-compliant reset values

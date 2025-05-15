@@ -1,0 +1,104 @@
+assert property (@(posedge wb_clk_i) disable iff (wb_rst_i) wb_stb_i |-> wb_cyc_i);
+
+assert property (@(posedge wb_clk_i) disable iff (wb_rst_i) !wb_cyc_i |-> !wb_ack_o);
+
+assert property (@(posedge wb_clk_i) wb_rst_i |-> !wb_ack_o);
+
+assert property (@(posedge wb_clk_i) disable iff (wb_rst_i) ($bits(wb_cyc_i) == 1));
+
+assert property (@(posedge wb_clk_i) 
+  wb_rst_i |-> !wb_ack_o);
+
+assert property (@(posedge wb_clk_i) ($bits(wb_cyc_i) == 1));
+
+assert property (@(posedge wb_clk_i) wb_stb_i |-> wb_cyc_i);
+
+assert property (@(posedge wb_clk_i) !wb_cyc_i |-> !wb_ack_o);
+
+property transaction_timing;
+  @(posedge wb_clk_i) disable iff (wb_rst_i)
+  (wb_cyc_i && wb_stb_i) |-> ##2 wb_ack_o;
+endproperty
+assert property (transaction_timing);
+
+property input_stability;
+  @(posedge wb_clk_i) disable iff (wb_rst_i)
+  (wb_cyc_i && wb_stb_i) |->
+    (wb_adr_i == $past(wb_adr_i,2)) and 
+    (wb_dat_i == $past(wb_dat_i,2)) and
+    (wb_we_i == $past(wb_we_i,2)) until wb_ack_o;
+endproperty
+assert property (input_stability);
+
+property cyc_until_ack;
+  @(posedge wb_clk_i) disable iff (wb_rst_i)
+  (wb_cyc_i && wb_stb_i) |-> wb_cyc_i throughout (##[1:2] wb_ack_o);
+endproperty
+assert property (cyc_until_ack);
+
+property addr_stability;
+  @(posedge wb_clk_i) disable iff (wb_rst_i)
+  (wb_cyc_i && wb_stb_i) |-> ##[1:2] $stable(wb_adr_i);
+endproperty
+assert property (addr_stability);
+
+property data_stability;
+  @(posedge wb_clk_i) disable iff (wb_rst_i)
+  (wb_cyc_i && wb_stb_i) |-> ##[1:2] $stable(wb_dat_i);
+endproperty
+assert property (data_stability);
+
+property we_stability;
+  @(posedge wb_clk_i) disable iff (wb_rst_i)
+  (wb_cyc_i && wb_stb_i) |-> ##[1:2] $stable(wb_we_i);
+endproperty
+assert property (we_stability);
+
+property no_cyc_toggle;
+  @(posedge wb_clk_i) disable iff (wb_rst_i)
+  $rose(wb_cyc_i) |-> wb_cyc_i until wb_ack_o;
+endproperty
+assert property (no_cyc_toggle);
+
+property exact_2cycle_txn;
+  @(posedge wb_clk_i) disable iff (wb_rst_i)
+  (wb_cyc_i && wb_stb_i) |-> ##2 wb_ack_o;
+endproperty
+assert property (exact_2cycle_txn);
+
+property addr_stability;
+  @(posedge wb_clk_i) disable iff (wb_rst_i)
+  (wb_cyc_i && wb_stb_i) |-> $stable(wb_adr_i) until_with wb_ack_o;
+endproperty
+assert property (addr_stability);
+
+property data_stability;
+  @(posedge wb_clk_i) disable iff (wb_rst_i)
+  (wb_cyc_i && wb_stb_i) |-> $stable(wb_dat_i) until_with wb_ack_o;
+endproperty
+assert property (data_stability);
+
+property we_stability;
+  @(posedge wb_clk_i) disable iff (wb_rst_i)
+  (wb_cyc_i && wb_stb_i) |-> $stable(wb_we_i) until_with wb_ack_o;
+endproperty
+assert property (we_stability);
+
+property cyc_until_ack;
+  @(posedge wb_clk_i) disable iff (wb_rst_i)
+  (wb_cyc_i && wb_stb_i) |-> wb_cyc_i throughout (##2 wb_ack_o);
+endproperty
+assert property (cyc_until_ack);
+
+property cyc_stb_until_ack;
+  @(posedge wb_clk_i) disable iff (wb_rst_i)
+  (wb_cyc_i && wb_stb_i) |=> (wb_cyc_i && wb_stb_i) ##1 wb_ack_o;
+endproperty
+assert property (cyc_stb_until_ack);
+
+property input_stability;
+  @(posedge wb_clk_i) disable iff (wb_rst_i)
+  (wb_cyc_i && wb_stb_i) |=> (wb_adr_i == $past(wb_adr_i) && wb_dat_i == $past(wb_dat_i) && wb_we_i == $past(wb_we_i));
+endproperty
+assert property (input_stability);
+

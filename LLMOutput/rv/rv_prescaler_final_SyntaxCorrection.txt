@@ -1,0 +1,70 @@
+<think>
+Okay, let's tackle this problem step by step. The user wants me to fix the syntax issues in the provided SystemVerilog assertions related to the prescaler in the Timer HWIP. The main errors reported were about the use of 'var' and non-constant expressions. 
+
+First, looking at the original assertion for prescaler_tick_period. The error was due to using 'local var int p;' which isn't correct in this context. In SystemVerilog, 'var' isn't used that way inside properties. Instead, I should declare 'int p;' without 'local var'. Also, the sequence after the trigger needs to correctly model the prescaler period. The original code tried to use a repetition with [*p], but since p is a variable, that's not allowed. 
+
+I remember that in SVA, using a variable in a repetition count isn't permitted because the count needs to be a constant. So instead, maybe using a consecutive check for !tick for p cycles followed by a tick. But how to handle variable p? Wait, the prescaler value is a register that can change, but the assertion needs to capture that when a tick occurs, the next tick should come after prescaler+1 cycles. 
+
+Wait, the prescaler works by counting up to the prescaler value, so the tick period is prescaler + 1 cycles. So, when a tick occurs, the next tick should be after (prescaler + 1) cycles. But since the prescaler can change, we need to capture its value at the time of the tick and use that for the check. 
+
+So, in the property, when tick happens, we sample the current prescaler value into a local variable p. Then, the next tick should occur exactly after p + 1 cycles. But how to model that in SVA. The '##' operator can take a variable if it's a local variable captured at the start. 
+
+Wait, the syntax for ##(p) requires p to be a constant, but if p is a local variable captured in the antecedent, maybe it's allowed. Let me check. In SystemVerilog, the delay in ## can be a variable if it's a local variable declared in the property. So, using '##(p +1)' should be okay if p is a local variable. 
+
+So, the corrected property would be:
+
+property prescaler_tick_period;
+  int p;
+  @(posedge clk_i) disable iff (!rst_ni || !active)
+  (tick, p = prescaler) |-> ##(p + 1) tick;
+endproperty
+
+This captures p when tick occurs and checks that after p+1 cycles, tick happens again. 
+
+Similarly, for the first_tick_post_activation property, the original had issues with $past and non-constant expressions. The correct approach is to capture the prescaler value when active rises and check that the first tick comes after prescaler + 1 cycles. 
+
+So, the corrected property would be:
+
+property first_tick_post_activation;
+  int p;
+  @(posedge clk_i)
+  ($rose(active) && rst_ni, p = prescaler) |-> ##(p + 1) tick;
+endproperty
+
+Here, when active rises and rst_ni is high, capture the prescaler value into p and check that after p+1 cycles, tick occurs.
+
+Another assertion was tick_pulse_width, which checks that tick is high for only one cycle unless prescaler is 0. The original had a syntax error. The corrected version should be:
+
+property tick_pulse_width;
+  @(posedge clk_i) disable iff (!rst_ni)
+  tick |-> (prescaler == 0) || ##1 !tick;
+endproperty
+
+This ensures that if prescaler isn't zero, tick is high for exactly one cycle.
+
+Putting it all together, the corrected assertions remove the 'local var' syntax, properly capture prescaler values into local variables, and use those variables in the sequence delays where allowed. This should resolve the syntax errors related to non-constant expressions and incorrect keyword usage.
+</think>
+
+```systemverilog
+localparam PRESCALER_WIDTH = 12;
+
+property prescaler_tick_period;
+  int p;
+  @(posedge clk_i) disable iff (!rst_ni || !active)
+  (tick, p = prescaler) |-> ##(p + 1) tick;
+endproperty
+assert property (prescaler_tick_period);
+
+property first_tick_post_activation;
+  int p;
+  @(posedge clk_i)
+  ($rose(active) && rst_ni, p = prescaler) |-> ##(p + 1) tick;
+endproperty
+assert property (first_tick_post_activation);
+
+property tick_pulse_width;
+  @(posedge clk_i) disable iff (!rst_ni)
+  tick |-> (prescaler == 0) || ##1 !tick;
+endproperty
+assert property (tick_pulse_width);
+```

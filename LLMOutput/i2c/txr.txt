@@ -1,0 +1,65 @@
+<think>
+Okay, let's tackle generating the SVAs for the txr signal. First, I need to make sure I understand all the requirements from the specification. The txr is an 8-bit write-only register at address 0x03. It's used to hold data for I2C transmission, with bit 0 serving as the R/W bit in address transfers. The reset value is 0x00, and it's accessed via the WISHBONE interface.
+
+Starting with the width assertion. The spec says it's 8 bits, so I'll check that using $bits(txr) == 8. That's straightforward.
+
+Next, connectivity. Since txr is write-only, I need to ensure that when the WISHBONE interface writes to address 0x03, the data is correctly captured. The WISHBONE protocol uses a 2-cycle handshake, so I should check that after a write with cyc, stb, we, and the correct address, the txr updates on the next cycle. But wait, the spec mentions that each access takes 2 cycles, so maybe I need to account for the ack signal. Oh right, the previous feedback pointed out that the original assertion didn't include wb_ack_o. So I'll adjust the connectivity assertion to wait for the ack signal in the second cycle.
+
+For the reset value, the original assertion used |=> which checks the next cycle. But the reset should take effect immediately when the reset signal is active. So I'll change it to |-> to check the same cycle. Also, need to handle both asynchronous (arst_i) and synchronous (wb_rst_i) resets correctly.
+
+Functionality-wise, when a WR command is issued (CR's WR bit set), txr's bit 0 must be 0 or 1. The previous assertion used $rose(cr[2]), but since WR is auto-cleared, using cr[2] directly makes more sense to cover the entire active period.
+
+Stability during TIP is crucial. The original assertion checked stability only after two consecutive TIP cycles, but it should start from the first cycle. Also, need to ensure no writes happen during TIP. The user should not write to txr while a transfer is ongoing, so an assertion to block writes during TIP is necessary.
+
+Another point from the feedback was the missing check for txr's data being loaded into the DataIO Shift Register. But since DataIO_ShiftReg isn't a signal in the provided interface, maybe that's internal and can't be checked here. However, the stability assertion during TIP indirectly ensures that txr isn't changed once the transfer starts.
+
+Putting it all together, I'll structure the SVAs into width, connectivity, and functionality sections. Make sure to use the correct disable conditions with arst_i level and include all necessary checks. Also, correct the timing for resets and WISHBONE writes based on the spec's 2-cycle handshake.
+</think>
+
+```systemverilog
+// Width assertion
+[width]
+assert property (@(posedge wb_clk_i) ($bits(txr) == 8));
+
+// Connectivity: WISHBONE 2-cycle write with ack
+[connectivity]
+property TXR_WriteConnectivity;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  (wb_cyc_i && wb_stb_i && wb_we_i && (wb_adr_i == 3'h03)) ##1 wb_ack_o
+  |-> (txr == $past(wb_dat_i,2));
+endproperty
+assert property (TXR_WriteConnectivity);
+
+// Functionality assertions
+[functionality]
+property TXR_ResetValue;
+  @(posedge wb_clk_i) (arst_i == ARST_LVL || wb_rst_i) |-> (txr == 8'h00);
+endproperty
+assert property (TXR_ResetValue);
+
+property TXR_ValidRWBit;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  cr[2] |-> (txr[0] inside {0,1});
+endproperty
+assert property (TXR_ValidRWBit);
+
+property TXR_NoWriteDuringTIP;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  sr[3] |-> !(wb_cyc_i && wb_stb_i && wb_we_i && (wb_adr_i == 3'h03));
+endproperty
+assert property (TXR_NoWriteDuringTIP);
+
+property TXR_Stability;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  sr[3] |-> $stable(txr);
+endproperty
+assert property (TXR_Stability);
+``` 
+
+**Explanation:**
+1. **Width Check:** Directly validates 8-bit width as per spec.
+2. **WISHBONE Connectivity:** Accounts for 2-cycle handshake using `wb_ack_o` and proper reset handling.
+3. **Immediate Reset:** Checks value during reset assertion cycle.
+4. **R/W Bit Validity:** Verifies txr[0] whenever WR command is active.
+5. **TIP Protection:** Blocks writes and ensures stability from first TIP cycle.
+6. **Strict Reset Handling:** Uses `ARST_LVL` parameter for correct asynchronous reset behavior.

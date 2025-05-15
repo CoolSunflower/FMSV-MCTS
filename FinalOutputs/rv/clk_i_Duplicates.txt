@@ -1,0 +1,79 @@
+assert property (@(posedge clk_i) $bits(clk_i) == 1);
+
+assert property (@(posedge clk_i) tick |=> !tick);
+
+assert property (@(posedge clk_i) $stable(tick) || $changed(tick));
+
+property MTIME_INCREMENT_ON_TICK;
+  @(posedge clk_i) disable iff (!rst_ni || !active)
+  tick |-> mtime_d == (mtime + 64'(step));
+endproperty
+assert property (MTIME_INCREMENT_ON_TICK);
+
+property MTIME_STABLE_NO_TICK;
+  @(posedge clk_i) disable iff (!rst_ni || !active)
+  !tick |-> mtime_d == mtime;
+endproperty
+assert property (MTIME_STABLE_NO_TICK);
+
+property TICK_CLOCK_ALIGNMENT;
+  @(posedge clk_i) $changed(tick) |-> $rose(clk_i); // Tick changes only at clock edges
+endproperty
+assert property (TICK_CLOCK_ALIGNMENT);
+
+property MTIME_INCREMENT_ON_TICK;
+  @(posedge clk_i) tick |-> mtime_d == (mtime + step); // Atomic step increment
+endproperty
+assert property (MTIME_INCREMENT_ON_TICK);
+
+property MTIME_STABILITY;
+  @(posedge clk_i) !tick |-> $stable(mtime); // Freeze when inactive
+endproperty
+assert property (MTIME_STABILITY);
+
+property TICK_CLOCK_ALIGNMENT;
+  @(negedge clk_i) !$changed(tick); // Tick remains stable between clock edges
+endproperty
+assert property (TICK_CLOCK_ALIGNMENT);
+
+property MTIME_INCREMENT_ON_TICK;
+  @(posedge clk_i) disable iff (!rst_ni || !active)
+  tick |-> mtime_d == ($past(mtime) + $past(step));
+endproperty
+assert property (MTIME_INCREMENT_ON_TICK);
+
+property MTIME_INCREMENT_ON_TICK;
+  @(posedge clk_i) tick |-> mtime_d == (mtime + step);
+endproperty
+assert property (MTIME_INCREMENT_ON_TICK);
+
+property MTIME_STABLE_NO_TICK;
+  @(posedge clk_i) !tick |-> mtime_d == mtime;
+endproperty
+assert property (MTIME_STABLE_NO_TICK);
+
+property TICK_PERIOD_CHECK;
+  int count;
+  @(posedge clk_i) disable iff (!rst_ni || !active)
+  (rst_ni && active, count=0) |=> (count < prescaler + 1, count++)[*0:$] ##1 (count == prescaler + 1) |-> tick;
+endproperty
+assert property (TICK_PERIOD_CHECK);
+
+property TICK_PERIOD_CHECK;
+  int count;
+  int presc;
+  @(posedge clk_i) disable iff (!rst_ni || !active)
+  (active, presc = prescaler + 1, count = 0) |=> 
+    (1, count++)[*0:$] ##1 (count == presc) |-> tick;
+endproperty
+assert property (TICK_PERIOD_CHECK);
+
+property TICK_PERIODICITY;
+  int count;
+  int presc;
+  @(posedge clk_i) disable iff (!rst_ni || !active)
+  (tick, presc = prescaler + 1, count = 0) |=> 
+    (1, count++)[*0:$] ##1 (count == presc) |-> tick;
+endproperty
+assert property (TICK_PERIODICITY);
+

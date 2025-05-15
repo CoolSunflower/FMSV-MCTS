@@ -1,0 +1,14 @@
+assert property (@(posedge clk_i) ($bits(step) == 8));
+
+property step_connectivity;
+  @(posedge clk_i) disable iff (!rst_ni)
+  (active && tick) |-> (mtime_d == (mtime + step));
+endproperty
+assert property (step_connectivity);
+
+property step_functionality_inactive;
+  @(posedge clk_i) disable iff (!rst_ni)
+  (!active) |-> (mtime_d == mtime);
+endproperty
+assert property (step_functionality_inactive);
+

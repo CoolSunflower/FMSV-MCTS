@@ -1,0 +1,74 @@
+assert property (@(posedge clk_i) ($bits(rst_ni) == 1));
+
+property rst_ni_intr_connectivity;
+  @(posedge clk_i) !rst_ni |-> (intr == 0);
+endproperty
+assert property (rst_ni_intr_connectivity);
+
+property rst_ni_mtime_connectivity;
+  @(posedge clk_i) !rst_ni |-> (mtime == 64'h0);
+endproperty
+assert property (rst_ni_mtime_connectivity);
+
+property rst_ni_tick_connectivity;
+  @(posedge clk_i) !rst_ni |-> !tick;
+endproperty
+assert property (rst_ni_tick_connectivity);
+
+property rst_ni_async_impact;
+  @(posedge clk_i) $fell(rst_ni) |-> (mtime == 64'h0) and (intr == 0);
+endproperty
+assert property (rst_ni_async_impact);
+
+property rst_ni_persistent_state;
+  @(posedge clk_i) !rst_ni |-> mtime == 64'h0 throughout (##[0:$] rst_ni);
+endproperty
+assert property (rst_ni_persistent_state);
+
+property post_reset_operation;
+  @(posedge clk_i) $rose(rst_ni) |=> !$stable(mtime);
+endproperty
+assert property (post_reset_operation);
+
+property rst_ni_async_impact;
+  @(posedge clk_i) $fell(rst_ni) |-> (intr == 0) and (mtime == 64'h0);
+endproperty
+assert property (rst_ni_async_impact);
+
+property rst_ni_signal_persistence;
+  @(posedge clk_i)
+  !rst_ni throughout (##[0:$] $rose(rst_ni)) |->
+    (intr == 0) and (mtime == 64'h0) and (!tick);
+endproperty
+assert property (rst_ni_signal_persistence);
+
+property rst_ni_mtime_d_connectivity;
+  @(posedge clk_i) !rst_ni |-> (mtime_d == 64'h0);
+endproperty
+assert property (rst_ni_mtime_d_connectivity);
+
+property rst_ni_async_impact;
+  @(posedge clk_i) $fell(rst_ni) |-> (mtime_d == 64'h0) and (intr == 0);
+endproperty
+assert property (rst_ni_async_impact);
+
+property rst_ni_override_active;
+  @(posedge clk_i) (!rst_ni && active) |-> (mtime_d == 64'h0);
+endproperty
+assert property (rst_ni_override_active);
+
+property rst_ni_prescaler_reset;
+  @(posedge clk_i) !rst_ni |=> $stable(tick)[*3];
+endproperty
+assert property (rst_ni_prescaler_reset);
+
+property rst_ni_async_reset;
+  @(posedge clk_i) $fell(rst_ni) |-> (mtime == 64'h0) and (intr == 0);
+endproperty
+assert property (rst_ni_async_reset);
+
+property rst_ni_persistence;
+  @(posedge clk_i) !rst_ni throughout (##[0:$] rst_ni) |-> (mtime == 64'h0);
+endproperty
+assert property (rst_ni_persistence);
+

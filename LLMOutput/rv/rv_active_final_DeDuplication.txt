@@ -1,0 +1,50 @@
+<think>
+Okay, let's tackle this step by step. The user wants all unique and valid assertions related to the signal 'active' from the provided list. They emphasized not modifying the assertions and making sure to include any width checks even if they're missing.
+
+First, I'll go through each of the given assertions one by one to see which ones involve the 'active' signal.
+
+1. **First assertion**: `assert property (@(posedge clk_i) disable iff (!rst_ni) ($bits(active) == 1));`  
+   This checks that the width of 'active' is 1 bit. So this is a width check assertion. The user mentioned including width checks even if missing, but here it's already present. Definitely include this.
+
+2. **Second assertion**: The property `active_inactive_mtime_stable` checks that when 'active' is low (!active), mtime_d equals mtime. This involves 'active', so include it.
+
+3. **Third assertion**: `active_inactive_no_tick` asserts that when 'active' is low, there's no tick. Again, uses 'active', so include.
+
+4. **Fourth assertion**: `active_inactive_no_intr` checks that when 'active' is low, interrupt intr[0] is not asserted. 'active' is involved here. Include.
+
+5. **Fifth assertion**: `active_high_operations_enabled` verifies that when 'active' is high, mtime_d updates correctly based on tick and step. Uses 'active', so include.
+
+Now, check for uniqueness. All these assertions are different in their conditions and checks. Each one targets different aspects of 'active' behavior: width, mtime stability, tick presence, interrupt, and mtime update. No duplicates here.
+
+The user wants to maximize retained assertions, so we include all five. Also, the width check is already covered by the first assertion. No missing assertions here related to 'active'. So the final list includes all five provided they are valid and use 'active'.
+
+No modifications needed to the assertions themselves, just list them as they are. Make sure they are wrapped properly in SystemVerilog syntax.
+</think>
+
+```systemverilog
+assert property (@(posedge clk_i) disable iff (!rst_ni) ($bits(active) == 1));
+
+property active_inactive_mtime_stable;
+  @(posedge clk_i) disable iff (!rst_ni)
+  !active |-> (mtime_d == mtime);
+endproperty
+assert property (active_inactive_mtime_stable);
+
+property active_inactive_no_tick;
+  @(posedge clk_i) disable iff (!rst_ni)
+  !active |-> !tick;
+endproperty
+assert property (active_inactive_no_tick);
+
+property active_inactive_no_intr;
+  @(posedge clk_i) disable iff (!rst_ni)
+  !active |-> !intr[0];
+endproperty
+assert property (active_inactive_no_intr);
+
+property active_high_operations_enabled;
+  @(posedge clk_i) disable iff (!rst_ni)
+  active |-> (mtime_d == (tick ? mtime + step : mtime));
+endproperty
+assert property (active_high_operations_enabled);
+```

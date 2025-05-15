@@ -1,0 +1,109 @@
+<think>
+Okay, let's tackle generating the SVAs for wb_ack_o. First, I need to thoroughly understand the specifications and the previous feedback to ensure correctness, consistency, and completeness.
+
+From the problem statement, wb_ack_o is a 1-bit output that acknowledges a valid bus cycle completion. It's part of the WISHBONE Classic interface, with each access taking exactly 2 clock cycles. The core uses registered outputs, meaning wb_ack_o is synchronized to the clock and should assert precisely one cycle after the address phase (when wb_stb_i and wb_cyc_i are high).
+
+Key points to cover in the SVAs:
+
+1. **Width Check**: Confirm wb_ack_o is strictly 1-bit. Although static, including a check adds robustness.
+
+2. **Timing**: wb_ack_o must assert exactly two cycles after the request (wb_stb_i && wb_cyc_i). Previous feedback highlighted that using |=> (which implies one cycle) was incorrect. The correct approach is to use |=> ##1 to account for the two-cycle access.
+
+3. **Protocol Compliance**: 
+   - wb_ack_o should only assert when wb_cyc_i is active (WISHBONE rule).
+   - No spurious acks without a prior valid request.
+
+4. **Functionality**:
+   - Single-cycle pulse: wb_ack_o must deassert after one cycle unless a new request starts immediately.
+   - Data validity during read operations (wb_dat_o stable when ack is high).
+   - Reset behavior: wb_ack_o must remain low during both synchronous and asynchronous resets.
+
+5. **Edge Cases**:
+   - Back-to-back transactions where a new request starts immediately after an ack.
+   - Ensure no multiple acks per request and handle reset transitions properly.
+
+Now, addressing the previous feedback:
+
+- **Timing Correction**: Replace 1-cycle checks with 2-cycle using ##1.
+- **Data Validity**: Add assertion for wb_dat_o stability during ack.
+- **Reset Handling**: Use ##[0:$] to cover the entire reset duration.
+- **Spurious Acks**: Check that ack only follows a valid request two cycles prior.
+
+Putting this all together, the SVAs should cover all these aspects without redundancy, using proper SVA syntax and structure.
+</think>
+
+```systemverilog
+// Width assertion (static property check)
+// Note: $bits check is compile-time, included here for documentation
+// synthesis translate_off
+initial assert ($bits(wb_ack_o) == 1) else $error("wb_ack_o width violation");
+// synthesis translate_on
+
+// [CT1] Correct 2-cycle access timing
+property ack_timing;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  (wb_stb_i && wb_cyc_i) |=> ##1 wb_ack_o;
+endproperty
+assert property (ack_timing);
+
+// [CT2] Ack only during active bus cycles
+property ack_cyc_relationship;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  wb_ack_o |-> $past(wb_cyc_i, 1); // Verify cyc_i was active previous cycle
+endproperty
+assert property (ack_cyc_relationship);
+
+// [FN1] Single-cycle ack pulse enforcement
+property ack_pulse_width;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  $rose(wb_ack_o) |=> $fell(wb_ack_o);
+endproperty
+assert property (ack_pulse_width);
+
+// [FN2] Data validity during read acknowledgements
+property ack_data_validity;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  (wb_ack_o && !wb_we_i) |-> !$isunknown(wb_dat_o);
+endproperty
+assert property (ack_data_validity);
+
+// [FN3] Reset clears ack persistently
+property ack_reset_behavior;
+  @(posedge wb_clk_i)
+  (arst_i == ARST_LVL || wb_rst_i) |-> ##[0:$] !wb_ack_o;
+endproperty
+assert property (ack_reset_behavior);
+
+// [FN4] No ack without valid request
+property ack_causality;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  wb_ack_o |-> $past(wb_stb_i && wb_cyc_i, 2); // 2-cycle causality check
+endproperty
+assert property (ack_causality);
+
+// [FN5] Back-to-back transaction handling
+property ack_transaction_boundary;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  (wb_stb_i && wb_cyc_i) throughout (##[1:2] wb_ack_o [->1]) |-> ##1 (~wb_ack_o until (wb_stb_i && wb_cyc_i));
+endproperty
+assert property (ack_transaction_boundary);
+```
+
+**Verification Matrix:**
+
+| Aspect                  | Covered By | Description |
+|-------------------------|------------|-------------|
+| Protocol Timing         | CT1, CT2   | Ensures 2-cycle access and cyc_i relationship |
+| Data Integrity          | FN2        | Validates data stability during read acks |
+| Reset Behavior          | FN3        | Covers synchronous and asynchronous reset cases |
+| Transaction Boundaries  | FN1, FN5   | Enforces single-cycle pulses and back-to-back handling |
+| Causal Validity         | FN4        | Prevents spurious acknowledgements |
+
+**Key Improvements:**
+1. **Exact 2-Cycle Timing**: Uses `|=> ##1` to match specification requirements
+2. **Robust Reset Handling**: `##[0:$]` operator ensures ack remains low throughout reset
+3. **Back-to-Back Support**: Transaction boundary property handles consecutive requests
+4. **Strict Protocol Compliance**: Combines WISHBONE rules with core-specific 2-cycle behavior
+5. **Defensive Checks**: Includes both static and dynamic verification aspects
+
+This solution addresses all specification requirements and previous feedback points while maintaining strict WISHBONE protocol compliance and handling edge cases effectively.

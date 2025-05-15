@@ -1,0 +1,79 @@
+<think>
+Okay, let's tackle generating the SVAs for wb_inta_o. First, I need to understand the signal's functionality based on the provided specs. The interrupt output wb_inta_o is 1-bit and asserts when both the IEN bit in the Control Register (ctr[1]) and the IF bit in the Status Register (sr[4]) are high. It should de-assert during resets (either asynchronous arst_i or synchronous wb_rst_i) and after an IACK command is written to the Command Register.
+
+Starting with the width check. The spec says it's a 1-bit signal, so a static check using $bits during elaboration makes sense. The previous attempt used a dynamic assertion, which is incorrect. So I'll use an initial block for a compile-time check.
+
+Next, reset handling. The asynchronous reset arst_i has a specific active level (ARST_LVL), so the assertion should trigger when arst_i equals ARST_LVL. Also, since wb_inta_o is registered, the reset should de-assert it immediately. The synchronous reset wb_rst_i should also de-assert the interrupt, checked at the clock edge.
+
+For functionality, since wb_inta_o is a registered output, there's a 1-cycle delay between IEN/IF changing and the interrupt updating. So the assertion should use |=> to check the next cycle. The previous version used |->, which doesn't account for the register delay.
+
+Handling IACK: Writing to the Command Register (address 0x04) with bit 7 set should clear the IF bit, thus de-asserting wb_inta_o. The assertion needs to check that the interrupt de-asserts in the same cycle as the write, using |->. Also, including wb_ack_o ensures the Wishbone handshake is completed.
+
+Interrupt persistence is important. The assertion should ensure that once asserted, wb_inta_o stays high as long as IEN and IF are high. Using throughout ensures no glitches.
+
+Arbitration loss (sr[2]) should trigger an interrupt if IEN is enabled. This requires checking that IF is set and the interrupt asserts after a delay.
+
+Finally, de-assertion when either IEN or IF drops. Using $fell to detect when either bit goes low and ensuring the interrupt de-asserts in the next cycle.
+
+I need to make sure all assertions handle both resets correctly with disable iff, use proper syntax, and cover all edge cases mentioned in the spec.
+</think>
+
+```systemverilog
+// Width assertion (compile-time check)
+initial assert ($bits(wb_inta_o) == 1) else $error("wb_inta_o must be 1-bit");
+
+// Reset behavior: Immediate de-assertion on asynchronous or synchronous reset
+property inta_reset;
+  @(posedge wb_clk_i or posedge arst_i)
+  (arst_i == ARST_LVL || wb_rst_i) |-> !wb_inta_o;
+endproperty
+assert property (inta_reset);
+
+// Core functionality: Registered interrupt assertion with 1-cycle delay
+property inta_functionality;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  (ctr[1] && sr[4]) |=> wb_inta_o;
+endproperty
+assert property (inta_functionality);
+
+// IACK command clears interrupt with protocol compliance
+property inta_iack_clear;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  (wb_we_i && wb_stb_i && wb_cyc_i && wb_ack_o && 
+  (wb_adr_i == 3'h4) && wb_dat_i[7]) |-> !wb_inta_o;
+endproperty
+assert property (inta_iack_clear);
+
+// Interrupt persistence during valid conditions
+property inta_persistence;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  (ctr[1] && sr[4]) |-> wb_inta_o throughout (ctr[1] && sr[4]);
+endproperty
+assert property (inta_persistence);
+
+// Arbitration loss interrupt generation
+property inta_arbitration;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  $rose(sr[2]) && ctr[1] |=> ##[1:2] wb_inta_o;
+endproperty
+assert property (inta_arbitration);
+
+// De-assertion when enable or flag drops
+property inta_deassert;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  $fell(ctr[1] || sr[4]) |=> !wb_inta_o;
+endproperty
+assert property (inta_deassert);
+```
+
+**Rationale:**
+1. **Width Check:** Static compile-time verification ensures signal integrity
+2. **Reset Handling:** Dual reset coverage with proper edge detection
+3. **Core Functionality:** Accounts for 1-cycle register delay using `|=>`
+4. **IACK Clear:** Validates same-cycle de-assertion with protocol handshake
+5. **Persistence:** Uses `throughout` to ensure stable interrupt assertion
+6. **Edge Cases:** Covers arbitration loss and proper de-assertion timing
+7. **Spec Compliance:** Strict adherence to register map (Command Reg @ 0x04)
+8. **Reset Safety:** `disable iff` prevents false triggers during resets
+
+This set provides complete coverage of all specified behaviors while maintaining strict protocol compliance and temporal correctness.

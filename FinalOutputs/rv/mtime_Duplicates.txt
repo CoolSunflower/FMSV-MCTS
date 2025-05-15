@@ -1,0 +1,20 @@
+assert property (@(posedge clk_i) $bits(mtime) == 64);
+
+property mtime_increment_p;
+  @(posedge clk_i) disable iff (!rst_ni)
+  (active && tick) |-> (mtime_d == (mtime + step));
+endproperty
+assert property (mtime_increment_p);
+
+property mtime_hold_p;
+  @(posedge clk_i) disable iff (!rst_ni)
+  (active && !tick) |-> (mtime_d == mtime);
+endproperty
+assert property (mtime_hold_p);
+
+property mtime_intr_p;
+  @(posedge clk_i) disable iff (!rst_ni)
+  (mtime >= mtimecmp[0]) |-> intr[0];
+endproperty
+assert property (mtime_intr_p);
+

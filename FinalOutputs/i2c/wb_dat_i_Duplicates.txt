@@ -1,0 +1,104 @@
+localparam CTRL_RESV_MASK = 8'hFC;
+localparam CMD_RESV_MASK = 8'hE8;
+assert property (@(posedge wb_clk_i) $bits(wb_dat_i) == 8);
+
+localparam CTRL_RESV_MASK = 8'hFC;
+localparam CMD_RESV_MASK = 8'hE8;
+property wb_dat_stable_until_ack;
+  @(posedge wb_clk_i) disable iff (arst_i != ARST_LVL || wb_rst_i)
+  (wb_we_i && wb_stb_i && wb_cyc_i) |-> 
+    $stable(wb_dat_i) throughout (1'b1 [*1:$] ##0 wb_ack_o);
+endproperty
+assert property (wb_dat_stable_until_ack);
+
+localparam CTRL_RESV_MASK = 8'hFC;
+localparam CMD_RESV_MASK = 8'hE8;
+property ctrl_reg_reserved_bits;
+  @(posedge wb_clk_i) disable iff (arst_i != ARST_LVL || wb_rst_i)
+  (wb_adr_i == 3'h2 && wb_we_i && wb_stb_i && wb_cyc_i) |->
+    (wb_dat_i & 8'hFC) == 0; // Mask 0b11111100
+endproperty
+assert property (ctrl_reg_reserved_bits);
+
+localparam CTRL_RESV_MASK = 8'hFC;
+localparam CMD_RESV_MASK = 8'hE8;
+property cmd_reg_reserved_bits;
+  @(posedge wb_clk_i) disable iff (arst_i != ARST_LVL || wb_rst_i)
+  (wb_adr_i == 3'h4 && wb_we_i && wb_stb_i && wb_cyc_i) |->
+    (wb_dat_i & 8'hE8) == 0; // Mask 0b11101000
+endproperty
+assert property (cmd_reg_reserved_bits);
+
+localparam CTRL_RESV_MASK = 8'hFC;
+localparam CMD_RESV_MASK = 8'hE8;
+property width_check;
+  @(posedge wb_clk_i) 1 |-> ($bits(wb_dat_i) == 8);
+endproperty
+assert property (width_check);
+
+localparam CTRL_RESV_MASK = 8'hFC;
+localparam CMD_RESV_MASK = 8'hE8;
+property p_wb_dat_i_width;
+  @(posedge wb_clk_i) 1 |-> ($bits(wb_dat_i) == 8);
+endproperty
+assert property (p_wb_dat_i_width);
+
+localparam CTRL_RESV_MASK = 8'hFC;
+localparam CMD_RESV_MASK = 8'hE8;
+property wb_dat_i_stable_during_write;
+  @(posedge wb_clk_i) disable iff (wb_rst_i)
+  (wb_we_i && wb_stb_i && wb_cyc_i) |-> $stable(wb_dat_i);
+endproperty
+assert property (wb_dat_i_stable_during_write);
+
+localparam CTRL_RESV_MASK = 8'hFC;
+localparam CMD_RESV_MASK = 8'hE8;
+property ctrl_reg_reserved_bits_zero;
+  @(posedge wb_clk_i) disable iff (wb_rst_i)
+  (wb_adr_i == 3'h2 && wb_we_i && wb_stb_i && wb_cyc_i) |-> (wb_dat_i[7:2] == 6'b0);
+endproperty
+assert property (ctrl_reg_reserved_bits_zero);
+
+localparam CTRL_RESV_MASK = 8'hFC;
+localparam CMD_RESV_MASK = 8'hE8;
+property cmd_reg_reserved_bits_zero;
+  @(posedge wb_clk_i) disable iff (wb_rst_i)
+  (wb_adr_i == 3'h4 && wb_we_i && wb_stb_i && wb_cyc_i) |-> (wb_dat_i[7:5] == 3'b0 && wb_dat_i[3] == 1'b0);
+endproperty
+assert property (cmd_reg_reserved_bits_zero);
+
+localparam CTRL_RESV_MASK = 8'hFC;
+localparam CMD_RESV_MASK = 8'hE8;
+property p_data_stability;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  (wb_cyc_i && wb_stb_i && wb_we_i) |-> 
+  $stable(wb_dat_i) throughout (##[1:2] wb_ack_o);
+endproperty
+assert property (p_data_stability);
+
+localparam CTRL_RESV_MASK = 8'hFC;
+localparam CMD_RESV_MASK = 8'hE8;
+property p_ctrl_reg_reserved;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  (wb_adr_i == 3'h2 && wb_cyc_i && wb_stb_i && wb_we_i) |-> 
+  (wb_dat_i & CTRL_RESV_MASK) == 8'h0;
+endproperty
+assert property (p_ctrl_reg_reserved);
+
+localparam CTRL_RESV_MASK = 8'hFC;
+localparam CMD_RESV_MASK = 8'hE8;
+property p_cmd_reg_reserved;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  (wb_adr_i == 3'h4 && wb_cyc_i && wb_stb_i && wb_we_i) |-> 
+  (wb_dat_i & CMD_RESV_MASK) == 8'h0;
+endproperty
+assert property (p_cmd_reg_reserved);
+
+localparam CTRL_RESV_MASK = 8'hFC;
+localparam CMD_RESV_MASK = 8'hE8;
+property p_no_unknown_values;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  (wb_cyc_i && wb_stb_i && wb_we_i) |-> !$isunknown(wb_dat_i);
+endproperty
+assert property (p_no_unknown_values);
+

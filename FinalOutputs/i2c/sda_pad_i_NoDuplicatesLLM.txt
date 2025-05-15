@@ -1,0 +1,81 @@
+<think>
+Okay, let's tackle this problem step by step. The user wants me to extract all unique and valid SystemVerilog assertions related to the signal sda_pad_i from the provided list, ensuring maximum retention of assertions. They also emphasized including a width check if missing and not modifying the assertions themselves.
+
+First, I need to go through each assertion in the given list and determine if it pertains to sda_pad_i. Let's look at each one:
+
+1. **Assertion 1**: Checks that the bit width of sda_pad_i is 1. This directly involves sda_pad_i and is a width check. Definitely relevant.
+
+2. **Assertion 2**: A property named sda_connectivity. It checks that when sda_pad_oe is 0, sda_pad_i equals sda_pad_o. This involves sda_pad_i and checks connectivity. Valid.
+
+3. **Assertion 3**: Checks that sda_pad_i remains stable while SCL is high. This is a functional check for sda_pad_i during specific clock conditions. Relevant.
+
+4. **Assertion 4**: Similar to assertion 2 but includes a disable iff (wb_rst_i). This is another version of the connectivity check with reset consideration. It's a variation but still valid and unique.
+
+5. **Assertion 5**: Another stability check during SCL high but with more conditions (cr bits). This adds specific conditions but still pertains to sda_pad_i. Unique and valid.
+
+6. **Assertion 6**: Checks for arbitration loss when sda_pad_i is low while the core is driving it high. This triggers a status bit. Functional check involving sda_pad_i.
+
+7. **Assertion 7**: Checks for a start condition by monitoring sda_pad_i's fall. Relates to sda_pad_i's behavior during start commands.
+
+8. **Assertion 8**: Checks for a stop condition via sda_pad_i's rise. Again, functional check for sda_pad_i.
+
+Now, need to ensure uniqueness. Looking at assertion 2 and 4, they are similar but differ by the disable iff clause. Both should be retained as they handle different scenarios (with and without reset consideration). Similarly, assertion 3 and 5 both check stability during SCL high but with different conditions. Both are unique and valid.
+
+The width assertion (1) is already present. No missing width checks here.
+
+So the extracted assertions for sda_pad_i are numbers 1, 2, 3, 4, 5, 6, 7, 8. All are related to sda_pad_i and are unique in their conditions and properties. No duplicates. The width check is already covered by the first assertion, so nothing needs to be added.
+</think>
+
+```systemverilog
+// Width check assertion
+assert property (@(posedge wb_clk_i) ($bits(sda_pad_i) == 1));
+
+// Connectivity assertions
+property sda_connectivity;
+  @(posedge wb_clk_i)
+  (sda_pad_oe == 1'b0) |-> (sda_pad_i == sda_pad_o);
+endproperty
+assert property (sda_connectivity);
+
+property sda_connectivity;
+  @(posedge wb_clk_i) disable iff (wb_rst_i)
+  (sda_pad_oe == 1'b0) |-> ##1 (sda_pad_i == sda_pad_o);
+endproperty
+assert property (sda_connectivity);
+
+// Stability during SCL high assertions
+property sda_stable_during_scl_high;
+  @(posedge wb_clk_i)
+  (scl_pad_oe == 1'b0 && $rose(scl_pad_i)) |-> ##1 ($stable(sda_pad_i) throughout (scl_pad_i[->1]));
+endproperty
+assert property (sda_stable_during_scl_high);
+
+property sda_stable_during_scl_high;
+  @(posedge wb_clk_i) disable iff (wb_rst_i)
+  (scl_pad_oe == 1'b0 && $fell(scl_pad_o) && 
+   sda_pad_oe == 1'b0 && !(cr[3] || cr[2])) |->
+  ($stable(sda_pad_i) throughout scl_pad_o[->1]);
+endproperty
+assert property (sda_stable_during_scl_high);
+
+// Arbitration loss assertion
+property arbitration_loss;
+  @(posedge wb_clk_i) disable iff (wb_rst_i)
+  (sda_pad_oe == 1'b0 && sda_pad_o && !sda_pad_i) |->
+  ##1 sr[3];
+endproperty
+assert property (arbitration_loss);
+
+// Protocol condition assertions
+property start_condition;
+  @(posedge wb_clk_i) disable iff (wb_rst_i)
+  (cr[3] && scl_pad_o) |-> $fell(sda_pad_i);
+endproperty
+assert property (start_condition);
+
+property stop_condition;
+  @(posedge wb_clk_i) disable iff (wb_rst_i)
+  (cr[2] && scl_pad_o) |-> $rose(sda_pad_i);
+endproperty
+assert property (stop_condition);
+```

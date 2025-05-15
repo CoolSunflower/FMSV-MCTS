@@ -1,0 +1,267 @@
+<think>
+Alright, let's tackle this problem step by step. The user has provided a list of SystemVerilog assertions and wants me to extract all unique and valid ones related to the signal `scl_pad_o`. They emphasized maximizing the number of retained assertions without modifying them and ensuring that assertions about the signal's width are included if missing.
+
+First, I need to go through each assertion in the provided list and determine which ones pertain directly to `scl_pad_o`. I'll check each assertion for mentions of `scl_pad_o` in their conditions or conclusions.
+
+Starting with the first assertion: `assert property (@(posedge wb_clk_i) $bits(scl_pad_o) == 1);`. This checks the width of `scl_pad_o` is 1 bit, which is crucial. Since the user mentioned including width checks, this is a must-have.
+
+Next, the assertion `SCL_OE_Connectivity` checks that when `scl_pad_oe` is 0, `scl_pad_o` is 0. This directly involves `scl_pad_o`, so it's valid and should be included.
+
+Looking at `SCL_ArbitrationLost`, it mentions `scl_pad_oe` being 1 when arbitration is lost. But `scl_pad_oe` is the output enable, not the actual signal `scl_pad_o`. So this might not directly relate to `scl_pad_o`'s value but its enable state. I'll note this but might include it if related.
+
+The assertion `SCL_CoreDisabled` checks that when the core is disabled, `scl_pad_oe` is 1. Again, this is about the output enable, not the signal's value. Not directly about `scl_pad_o` but its enable. Maybe include if relevant.
+
+The `SCL_STA_Release` assertion checks that after setting the STA bit, `scl_pad_oe` becomes 1. Again, output enable, not the signal itself. Hmm.
+
+The `SCL_ClockStretch` assertion checks that when SCL is low and TIP is active, `scl_pad_oe` is 1. This relates to the enable, not the signal's value. Might be relevant for the output's behavior but not the value of `scl_pad_o`.
+
+Another `SCL_OE_Connectivity` with disable iff clauses checks the same as before. Duplicate? Need to check.
+
+The `SCL_ClockStretch` property with ##[1:10] $stable(scl_pad_i) is about the input, not `scl_pad_o`, so maybe not relevant.
+
+`SCL_DriveLow` is similar to the first SCL_OE_Connectivity, ensuring that when output enable is 0, the output is 0. This is directly about `scl_pad_o`'s value when enabled, so it's valid.
+
+`SCL_ValidStart` and `SCL_ValidStop` check the SDA line during start/stop conditions. These involve SDA more than SCL, so may not relate directly to `scl_pad_o`.
+
+`SCL_StretchHandling` checks the output enable during stretching. Not directly about `scl_pad_o`'s value.
+
+The assertion `SCL_NeverHigh` states that `scl_pad_o` should never be high. Wait, that's a critical one. But according to the documentation, SCL is driven low when output enable is active. So when `scl_pad_oe` is 0, `scl_pad_o` is 0, and when `scl_pad_oe` is 1, the line is pulled up externally. So `scl_pad_o` should indeed never drive high; the line is high due to pull-up when not driven. Thus, this assertion is correct and must be included.
+
+The `SCL_ActivePhase` property uses `scl_pad_oe` and `scl_pad_o` being 0 during certain conditions. This is about the output value when active, so valid.
+
+`SCL_StartStop` checks that when STA or STO bits are set, `scl_pad_oe` is 1. Again, output enable, not the signal value directly.
+
+`SCL_ArbitrationLost` (another version) checks `scl_pad_oe` when arbitration is lost. Output enable again.
+
+`SCL_CoreDisabled` (another version) checks `scl_pad_oe` when the core is disabled. Output enable.
+
+From this analysis, the assertions that directly mention `scl_pad_o` in their conditions or conclusions are:
+
+1. The width check: `$bits(scl_pad_o) == 1`
+2. `SCL_OE_Connectivity` (both versions) which links `scl_pad_oe` to `scl_pad_o` being 0.
+3. `SCL_DriveLow` which is similar to the OE_Connectivity.
+4. `SCL_NeverHigh` which asserts that `scl_pad_o` is never high.
+5. `SCL_ActivePhase` which checks that `scl_pad_o` is 0 during active phases.
+
+Now, check for duplicates. The first OE_Connectivity and the later one with disable iff are similar but the second includes disable conditions, making them distinct. However, the user wants unique assertions. The second version with disable iff is more comprehensive, so maybe retain that one and discard the simpler version.
+
+Also, the `SCL_DriveLow` is another version of OE_Connectivity. Need to check if they are the same. Yes, both state that when OE is 0, the output is 0. So they are redundant. The one with disable iff is better.
+
+The `SCL_NeverHigh` is crucial and unique.
+
+The `SCL_ActivePhase` includes a check on `scl_pad_o == 0` during certain conditions, so valid.
+
+Additionally, the width assertion is present and necessary.
+
+So the unique valid assertions for `scl_pad_o` are:
+
+- Width check
+- SCL_OE_Connectivity with disable iff
+- SCL_NeverHigh
+- SCL_ActivePhase (checks scl_pad_o is 0 during active phases)
+- SCL_DriveLow (maybe redundant with OE_Connectivity)
+
+Wait, but SCL_DriveLow is the same as OE_Connectivity. The difference is that OE_Connectivity uses |->, while DriveLow uses |-> as well. Looking at their code:
+
+SCL_OE_Connectivity:
+(oe == 0) |-> (o == 0)
+
+SCL_DriveLow:
+(oe == 0) |-> (o == 0)
+
+They are the same. So we can consider them duplicates. So between the two versions, the one with disable iff is better.
+
+But the user provided both with and without disable iff. So perhaps they are considered unique.
+
+But according to the user instructions, do not modify the assertions, just return unique ones. So even if they are similar but written differently, they should be included as separate if present.
+
+Wait, looking back at the user's list:
+
+The assertion list includes:
+
+1. 'assert property (@(posedge wb_clk_i) $bits(scl_pad_o) == 1);'
+
+2. 'property SCL_OE_Connectivity;\n  @(posedge wb_clk_i) (scl_pad_oe == 0) |-> (scl_pad_o == 0);\nendproperty\nassert property (SCL_OE_Connectivity);'
+
+3. ... (other assertions not directly about scl_pad_o)
+
+7. 'property SCL_OE_Connectivity;\n  @(posedge wb_clk_i) disable iff (wb_rst_i || arst_i)\n  (scl_pad_oe == 0) |-> (scl_pad_o == 0);\nendproperty\nassert property (SCL_OE_Connectivity);'
+
+9. 'property SCL_DriveLow;\n  @(posedge wb_clk_i) disable iff (wb_rst_i || arst_i)\n  (scl_pad_oe == 0) |-> (scl_pad_o == 0);\nendproperty\nassert property (SCL_DriveLow);'
+
+So items 2,7,9 are similar but may differ in disable conditions.
+
+Item 2: no disable, asserts whenever oe is 0, o must be 0.
+
+Item 7: same as 2 but with disable iff.
+
+Item9: same as 7 but named DriveLow.
+
+Thus, 7 and 9 are duplicates in logic but different in name. The user might consider them duplicates, but they are written as separate properties. However, the user wants unique assertions, so if two assertions have the same logic, even with different names, they are duplicates. But in this case, 7 and 9 have different names but same logic. So need to check.
+
+Looking at the code:
+
+Property SCL_OE_Connectivity (item7) and SCL_DriveLow (item9) both check that when oe is 0, o is 0, with the same disable conditions. Therefore, they are duplicates. Similarly, item2 is a simpler version without disable.
+
+But according to the user's instructions, I should return all unique assertions from the list provided. So if the user's list has multiple similar assertions but written differently, they should be considered unique. But the user wants to maximize retained assertions, but also extract unique ones. The key is to avoid exact duplicates.
+
+Looking at the user's list, item2 and item7 are both SCL_OE_Connectivity but one has disable iff and the other doesn't. Similarly, item9 is another name but same as item7.
+
+Wait, item7 and item9:
+
+Item7:
+
+property SCL_OE_Connectivity;
+  @(posedge wb_clk_i) disable iff (wb_rst_i || arst_i)
+  (scl_pad_oe == 0) |-> (scl_pad_o == 0);
+endproperty
+
+Item9:
+
+property SCL_DriveLow;
+  @(posedge wb_clk_i) disable iff (wb_rst_i || arst_i)
+  (scl_pad_oe == 0) |-> (scl_pad_o == 0);
+endproperty
+
+These are the same except for the property name. But since the user provided them as separate assertions, perhaps they are to be considered separate. However, from a logical standpoint, they are the same and hence duplicates. So in the final list, only one should be included.
+
+But the user says "do not attempt to modify the actual assertion in any way, just return me all the unique assertions". So if two assertions are textually different (even if logically same), they are considered unique. But if they are textually the same, they are duplicates.
+
+Looking at item2 and item7: item2 has no disable, item7 has disable. So different.
+
+Item7 and item9 have different names but same code except for the name.
+
+But the actual assertion code is the same except for the property name, but the assert statement refers to the property name. So in terms of the code that's executed, they are different properties but same check. So for the purpose of this extraction, since the user provided them as separate entries, perhaps they are considered unique. But that's not the case. The user provided a list of assertion strings, each being a separate entry. So even if two entries have the same logical check, if they are different strings, they are considered separate. However, the user wants unique assertions. So perhaps the user wants to avoid exact textual duplicates.
+
+Looking at the list:
+
+Assertions 2,7,9 all check that when oe is 0, o is 0. But 2 has no disable, 7 and 9 have disable and different names. So in the list provided, these are three separate assertions, but some are more specific (with disable) than others.
+
+The user wants to maximize the number of retained assertions, so perhaps include all unless they are exact duplicates. But in the user's list, items 7 and 9 are different in name but same in logic. So they are duplicates. Hence, in the final list, only one of them should be kept.
+
+But the user's instruction says: "extract all unique and valid assertions from this list". So uniqueness is textual uniqueness. However, the user might consider uniqueness based on the logical condition.
+
+But given the instructions, I need to follow the user's list and extract those that are unique in the provided list. If two assertions are textually different but logically the same, but present in the input list, should they be included?
+
+The user says: "Ensure that you maximise the number of retained assertions!! This maximisation is of utmost importance." So even if there are logical duplicates, if they are present in the input list, retain them.
+
+But the user also says "extract all unique and valid assertions", which probably means unique in the input list. So if in the input list there are two identical assertion texts, they are duplicates and should be kept once. But in this case, the input list's items 7 and 9 are different (different property names) but same body. Hence, in the input list, they are two separate entries. Therefore, the user might want to retain both. However, that's not possible because they are the same in logic, but the user's instructions say not to modify the assertions, just return unique ones. So perhaps the answer should include both, assuming that they are considered unique because they are different strings.
+
+But that would not be correct. For example, if two assertions are the same except for a comment, they are unique strings but same logic. But according to the user's instruction, do not modify, so they must be included as separate assertions.
+
+But looking at the actual entries:
+
+Item7 code:
+
+property SCL_OE_Connectivity;
+  @(posedge wb_clk_i) disable iff (wb_rst_i || arst_i)
+  (scl_pad_oe == 0) |-> (scl_pad_o == 0);
+endproperty
+assert property (SCL_OE_Connectivity);
+
+Item9 code:
+
+property SCL_DriveLow;
+  @(posedge wb_clk_i) disable iff (wb_rst_i || arst_i)
+  (scl_pad_oe == 0) |-> (scl_pad_o == 0);
+endproperty
+assert property (SCL_DriveLow);
+
+These are two different properties, with different names, but the same body. So the assertions are technically different because they have different names, even though they check the same condition. Thus, in the input list, they are two separate assertions, and the user wants to maximize retained assertions. Therefore, both should be included unless instructed otherwise.
+
+However, this is not typical in verification, but given the user's instructions, perhaps it's safer to include both.
+
+But from a verification standpoint, having two assertions checking the same condition is redundant, but the user's list includes them, so they must be retained.
+
+Another assertion is `SCL_NeverHigh` which states that `scl_pad_o` is never high. According to the documentation, since the core uses open drain, the output should only drive low or be tri-stated. Therefore, `scl_pad_o` should never be driven high by the core. Hence, this assertion is valid.
+
+The `SCL_ActivePhase` assertion checks that during certain status and control conditions, the `scl_pad_o` is 0 for a duration. This ensures that when the core is active, it drives SCL low appropriately.
+
+The width assertion is already present and necessary.
+
+Putting it all together:
+
+- The width assertion (item1)
+- The two SCL_OE_Connectivity assertions (items2 and7)
+- The SCL_DriveLow assertion (item9)
+- The SCL_NeverHigh (item13)
+- The SCL_ActivePhase (item14)
+
+But items7 and9 are the same except for the property name. If they're considered unique in the list, they should be included. But in reality, they are duplicates in logic. However, the user's instruction is to not modify the assertions and retain all unique ones from the list. Therefore, even if they are logical duplicates but textually distinct, they are included.
+
+Wait, looking at the user's list:
+
+The user provided a list where item7 and item9 are different properties but same check. Therefore, in the input list, they are considered separate entries. So the output should include both to maximize retained assertions.
+
+Similarly, the first SCL_OE_Connectivity (item2) has no disable iff, while item7 and item9 have disable iff. These are different assertions and should be retained as separate.
+
+The user also wants to ensure that the width assertion is present. It is in item1.
+
+Item13: SCL_NeverHigh is a direct check on `scl_pad_o` never being high. Important.
+
+Item14: SCL_ActivePhase checks `scl_pad_o` is 0 during active phases.
+
+Therefore, the final list of unique assertions from the provided list related to `scl_pad_o` are:
+
+1. The width check: `assert property (@(posedge wb_clk_i) $bits(scl_pad_o) == 1);`
+2. SCL_OE_Connectivity without disable iff.
+3. SCL_OE_Connectivity with disable iff.
+4. SCL_DriveLow (same as 3 but different name).
+5. SCL_NeverHigh.
+6. SCL_ActivePhase.
+
+But items3 and4 are the same check, but with different property names. Therefore, they are considered separate in the input list and should be retained as such in the output.
+
+However, the user may consider that SCL_OE_Connectivity with disable iff and SCL_DriveLow are duplicates and only one should be kept. But as per the user's instruction to maximize retained assertions, both are included.
+
+Additionally, the SCL_ActivePhase is included because it directly references `scl_pad_o` being 0.
+
+So compiling all these, the final answer includes the following assertions from the list:
+
+- Assertion 1 (width)
+- Assertion 2 (OE_Connectivity without disable)
+- Assertion7 (OE_Connectivity with disable)
+- Assertion9 (DriveLow with disable)
+- Assertion13 (NeverHigh)
+- Assertion14 (ActivePhase)
+
+Additionally, need to check if any other assertions mention `scl_pad_o` in their properties.
+
+Looking back, the SCL_ValidStart and SCL_ValidStop do not mention `scl_pad_o`, so they are excluded.
+
+Another check: the `SCL_ArbitrationLost` properties check `scl_pad_oe`, not `scl_pad_o`, so they're excluded.
+
+Thus, the final extracted assertions related to `scl_pad_o` are the ones listed above.
+</think>
+
+```systemverilog
+assert property (@(posedge wb_clk_i) $bits(scl_pad_o) == 1);
+
+property SCL_OE_Connectivity;
+  @(posedge wb_clk_i) (scl_pad_oe == 0) |-> (scl_pad_o == 0);
+endproperty
+assert property (SCL_OE_Connectivity);
+
+property SCL_OE_Connectivity;
+  @(posedge wb_clk_i) disable iff (wb_rst_i || arst_i)
+  (scl_pad_oe == 0) |-> (scl_pad_o == 0);
+endproperty
+assert property (SCL_OE_Connectivity);
+
+property SCL_DriveLow;
+  @(posedge wb_clk_i) disable iff (wb_rst_i || arst_i)
+  (scl_pad_oe == 0) |-> (scl_pad_o == 0);
+endproperty
+assert property (SCL_DriveLow);
+
+property SCL_NeverHigh;
+  @(posedge wb_clk_i) (scl_pad_o !== 1'b1);
+endproperty
+assert property (SCL_NeverHigh);
+
+property SCL_ActivePhase;
+  @(posedge wb_clk_i) disable iff (wb_rst_i || arst_i)
+  (i2c_master_top.sr[2] && i2c_master_top.ctr[0]) |-> ##4 (scl_pad_oe == 0)[*1:$] intersect (scl_pad_o == 0);
+endproperty
+assert property (SCL_ActivePhase);
+```

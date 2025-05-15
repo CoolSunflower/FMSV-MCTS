@@ -1,0 +1,18 @@
+property mtimecmp_intr_p;
+  @(posedge clk_i) disable iff (!rst_ni || !active)
+    (mtime >= mtimecmp[0]) |-> intr[0];
+endproperty
+assert property (mtimecmp_intr_p);
+
+property mtimecmp_no_intr_p;
+  @(posedge clk_i) disable iff (!rst_ni || !active)
+    (mtime < mtimecmp[0]) |-> !intr[0];
+endproperty
+assert property (mtimecmp_no_intr_p);
+
+property mtimecmp_stable_p;
+  @(posedge clk_i) disable iff (!rst_ni)
+    active |-> $stable(mtimecmp);
+endproperty
+assert property (mtimecmp_stable_p);
+

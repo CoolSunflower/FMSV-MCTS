@@ -1,0 +1,110 @@
+localparam PRESCALER_WIDTH = 12;
+assert property (@(posedge clk_i) $bits(prescaler) == 12);
+
+localparam PRESCALER_WIDTH = 12;
+assert property (@(posedge clk_i) 
+  (prescaler == 0 && active) |-> ##1 tick);
+
+localparam PRESCALER_WIDTH = 12;
+assert property (@(posedge clk_i) !rst_ni |-> !tick);
+
+localparam PRESCALER_WIDTH = 12;
+property no_tick_inactive;
+  @(posedge clk_i) disable iff (!rst_ni)
+  (!active || !rst_ni) |-> !tick;
+endproperty
+assert property (no_tick_inactive);
+
+localparam PRESCALER_WIDTH = 12;
+property tick_pulse_width;
+  @(posedge clk_i) disable iff (!rst_ni)
+  tick |=> !tick;
+endproperty
+assert property (tick_pulse_width);
+
+localparam PRESCALER_WIDTH = 12;
+property prescaler_stability;
+  @(posedge clk_i) disable iff (!rst_ni || !active)
+  $changed(prescaler) |-> tick;
+endproperty
+assert property (prescaler_stability);
+
+localparam PRESCALER_WIDTH = 12;
+property zero_prescaler;
+  @(posedge clk_i) disable iff (!rst_ni || !active)
+  (prescaler == 0) |-> ##1 tick;
+endproperty
+assert property (zero_prescaler);
+
+localparam PRESCALER_WIDTH = 12;
+property reset_checks;
+  @(posedge clk_i)
+  $fell(rst_ni) |-> !tick until_with $rose(rst_ni);
+endproperty
+assert property (reset_checks);
+
+localparam PRESCALER_WIDTH = 12;
+property inactive_no_ticks;
+  @(posedge clk_i) 
+  (!active || !rst_ni) |-> !tick;
+endproperty
+assert property (inactive_no_ticks);
+
+localparam PRESCALER_WIDTH = 12;
+property single_cycle_tick;
+  @(posedge clk_i) 
+  tick |=> !tick;
+endproperty
+assert property (single_cycle_tick);
+
+localparam PRESCALER_WIDTH = 12;
+property prescaler_stable;
+  @(posedge clk_i) disable iff (!rst_ni || !active)
+  tick |=> $stable(prescaler) until_with tick;
+endproperty
+assert property (prescaler_stable);
+
+localparam PRESCALER_WIDTH = 12;
+property prescaler_stability;
+  @(posedge clk_i) disable iff (!rst_ni || !active)
+  $changed(prescaler) |-> !tick;
+endproperty
+assert property (prescaler_stability);
+
+localparam PRESCALER_WIDTH = 12;
+property first_tick_post_activation;
+  @(posedge clk_i)
+  $rose(active) && rst_ni |-> ##1 (!tick [*0:$] ##1 tick);
+endproperty
+assert property (first_tick_post_activation);
+
+localparam PRESCALER_WIDTH = 12;
+property no_tick_inactive;
+  @(posedge clk_i) disable iff (!rst_ni)
+  !active |-> !tick;
+endproperty
+assert property (no_tick_inactive);
+
+localparam PRESCALER_WIDTH = 12;
+property prescaler_tick_period;
+  int p;
+  @(posedge clk_i) disable iff (!rst_ni || !active)
+  (tick, p = prescaler) |-> ##(p + 1) tick;
+endproperty
+assert property (prescaler_tick_period);
+
+localparam PRESCALER_WIDTH = 12;
+property first_tick_post_activation;
+  int p;
+  @(posedge clk_i)
+  ($rose(active) && rst_ni, p = prescaler) |-> ##(p + 1) tick;
+endproperty
+assert property (first_tick_post_activation);
+
+localparam PRESCALER_WIDTH = 12;
+property tick_pulse_width;
+  @(posedge clk_i) disable iff (!rst_ni)
+  tick |-> (prescaler == 0) || ##1 !tick;
+endproperty
+assert property (tick_pulse_width);
+

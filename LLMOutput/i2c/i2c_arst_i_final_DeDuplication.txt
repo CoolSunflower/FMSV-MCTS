@@ -1,0 +1,181 @@
+<think>
+Okay, let's tackle this problem. The user wants all unique and valid SystemVerilog assertions for the signal `arst_i` from the provided list, maximizing retention without modification. They also mention including assertions about the signal's width if missing.
+
+First, I need to go through each assertion in the list and check if it's related to `arst_i`. The user specified the signal name is `arst_i`, so I'll focus on assertions that directly involve this signal.
+
+Looking at the list:
+
+1. **arst_wb_rst_mutex**: Checks that `arst_i` and `wb_rst_i` are not active simultaneously. This is valid and unique.
+2. **arst_ctr_en**: Ensures that when `arst_i` is active, the EN bit in the control register is 0. Valid.
+3. **arst_prer_reset**: Checks if `prer` is reset to 0xFFFF. Valid.
+4. **arst_txr_reset**: Checks TXR is reset to 0x00. Valid.
+5. **arst_rxr_reset**: Checks RXR is reset to 0x00. Valid.
+6. **arst_status_bits**: Verifies specific status bits are reset. Valid.
+7. **arst_inta**: Ensures interrupt output is low. Valid.
+8. **arst_ctr_reset**: Control register reset. Appears twice; need to check for duplicates.
+9. **arst_cr_reset**: Command register reset. Valid.
+10. **arst_status_reset**: Status register reset. Appears twice, once as `arst_status_reset` and another as `arst_sr_reset`. Need to check if they are the same.
+11. **arst_scl_sda_default**: Checks SCL and SDA outputs are high. Valid.
+12. **arst_ctr_reset** (another version): Checks EN and IEN bits. Different from earlier `arst_ctr_reset`, so unique.
+13. **arst_sr_reset**: Same as `arst_status_reset`? The code seems identical, so they are duplicates.
+14. **arst_scl_oe**: Checks SCL output enable. Valid.
+15. **arst_sda_oe**: Checks SDA output enable. Valid.
+
+Now, checking for duplicates:
+
+- The first `arst_ctr_reset` checks if `ctr` is 8'h00. The second one checks specific bits and reserved parts. These are different, so both are kept.
+- `arst_status_reset` and `arst_sr_reset` are the same, so keep one.
+  
+Regarding width assertions: The user mentioned adding assertions about the width of `arst_i` if missing. The provided list doesn't have an assertion checking that `arst_i` is a 1-bit signal. So I need to add that.
+
+Therefore, the unique assertions from the list, plus the width assertion, are:
+
+1. arst_wb_rst_mutex
+2. arst_ctr_en
+3. arst_prer_reset
+4. arst_txr_reset
+5. arst_rxr_reset
+6. arst_status_bits
+7. arst_inta
+8. arst_ctr_reset (two versions, both unique)
+9. arst_cr_reset
+10. arst_status_reset (keeping one)
+11. arst_scl_sda_default
+12. arst_scl_oe
+13. arst_sda_oe
+14. New assertion for `arst_i` width.
+
+But wait, the user said not to modify existing assertions. So the new width assertion would be:
+
+`assert property (arst_i == 1'b0 || arst_i == 1'b1);` or using $onehot, but since it's a single bit, checking it's 0 or 1.
+
+However, the user's instructions say to add it only if missing. So I need to add:
+
+`assert final (arst_i inside {1'b0, 1'b1});` to ensure it's a 1-bit signal.
+
+But since the user wants the exact code from the list, and the list doesn't have this, I must include it as a new assertion. However, in the original list, there's no width assertion. So I need to create it now.
+
+But wait, the user instructions say: "Do not attempt to modify the actual assertion in any way, just return me all the unique assertions between the ```systemverilog and ``` tags." So they don't want any new assertions added beyond the provided list. But they mentioned to add width check if missing. But the original list doesn't include it, so according to the problem, we need to add it even if it's not present. However, the user's last instruction says: "Ensure that the assertions for width of current signal is always present, add that assertion if missing."
+
+So, even though the list doesn't include a width assertion for `arst_i`, we need to add one. So the final list includes all unique assertions from the list plus the width check.
+
+But how to write the width check. Since `arst_i` is a 1-bit signal, the width assertion can be:
+
+`property arst_width; @(posedge wb_clk_i) 1'b1; endproperty assert property (arst_width);`
+
+But that's not checking anything. Wait, the width can be checked by ensuring that `arst_i` is only 0 or 1. So:
+
+`property arst_i_width; @(posedge wb_clk_i) arst_i inside {1'b0, 1'b1}; endproperty assert property (arst_i_width);`
+
+But this is a new assertion not present in the original list. Since the user requires to add it if missing, we must include it.
+
+So combining all, the final list includes all unique assertions from the original list plus the new width assertion.
+
+But the user's very first instruction says: "Extract all unique and valid assertions from this list for the signal name: arst_i. Ensure that you maximise the number of retained assertions!! This maximisation is of utmost importance." So from the given list, extract all unique ones, then add the missing width check.
+
+So now, compiling all unique assertions from the original list, removing duplicates, and adding the width check.
+
+But in the original list, there are two `arst_ctr_reset` assertions. Let's check their code:
+
+First `arst_ctr_reset`:
+"property arst_ctr_reset;\n  @(posedge wb_clk_i) (arst_i == ARST_LVL) |-> (ctr == 8'h00);\nendproperty\nassert property (arst_ctr_reset);"
+
+Second `arst_ctr_reset`:
+"property arst_ctr_reset;\n  @(posedge wb_clk_i) (arst_i == ARST_LVL) |-> \n    (ctr[7] == 1'b0) &&    // EN bit cleared\n    (ctr[6] == 1'b0) &&    // IEN bit cleared\n    $stable(ctr[5:0]);      // Reserved bits unchanged\nendproperty\nassert property (arst_ctr_reset);"
+
+These are different. The first checks the entire `ctr` register is 0, the second checks specific bits and that reserved bits are stable. Therefore, they are different and both should be retained.
+
+Similarly, `arst_status_reset` and `arst_sr_reset` are duplicates, so keep one.
+
+Also, need to check if all the assertions in the list are unique. After deduplication:
+
+Original list has 15 entries. Some are duplicates (like arst_status_reset appearing twice), but others are unique.
+
+After reviewing each, compiling the unique ones and adding the width assertion.
+</think>
+
+```systemverilog
+property arst_wb_rst_mutex;
+  @(posedge wb_clk_i) !((arst_i == ARST_LVL) && wb_rst_i);
+endproperty
+assert property (arst_wb_rst_mutex);
+
+property arst_ctr_en;
+  @(posedge wb_clk_i) (arst_i == ARST_LVL) |-> (ctr[7] == 1'b0);
+endproperty
+assert property (arst_ctr_en);
+
+property arst_prer_reset;
+  @(posedge wb_clk_i) (arst_i == ARST_LVL) |-> (prer == 16'hFFFF);
+endproperty
+assert property (arst_prer_reset);
+
+property arst_txr_reset;
+  @(posedge wb_clk_i) (arst_i == ARST_LVL) |-> (txr == 8'h00);
+endproperty
+assert property (arst_txr_reset);
+
+property arst_rxr_reset;
+  @(posedge wb_clk_i) (arst_i == ARST_LVL) |-> (rxr == 8'h00);
+endproperty
+assert property (arst_rxr_reset);
+
+property arst_status_bits;
+  @(posedge wb_clk_i) (arst_i == ARST_LVL) |-> 
+    (sr[5] == 0 &&  // BUSY
+     sr[4] == 0 &&  // AL
+     sr[3] == 0 &&  // TIP
+     sr[0] == 0);   // IF
+endproperty
+assert property (arst_status_bits);
+
+property arst_inta;
+  @(posedge wb_clk_i) (arst_i == ARST_LVL) |-> (wb_inta_o == 1'b0);
+endproperty
+assert property (arst_inta);
+
+property arst_ctr_reset;
+  @(posedge wb_clk_i) (arst_i == ARST_LVL) |-> (ctr == 8'h00);
+endproperty
+assert property (arst_ctr_reset);
+
+property arst_cr_reset;
+  @(posedge wb_clk_i) (arst_i == ARST_LVL) |-> (cr == 8'h00);
+endproperty
+assert property (arst_cr_reset);
+
+property arst_status_reset;
+  @(posedge wb_clk_i) (arst_i == ARST_LVL) |-> (sr == 8'h00);
+endproperty
+assert property (arst_status_reset);
+
+property arst_scl_sda_default;
+  @(posedge wb_clk_i) (arst_i == ARST_LVL) |-> 
+    (scl_pad_o == 1'b1 && sda_pad_o == 1'b1);
+endproperty
+assert property (arst_scl_sda_default);
+
+property arst_ctr_reset;
+  @(posedge wb_clk_i) (arst_i == ARST_LVL) |-> 
+    (ctr[7] == 1'b0) &&    // EN bit cleared
+    (ctr[6] == 1'b0) &&    // IEN bit cleared
+    $stable(ctr[5:0]);      // Reserved bits unchanged
+endproperty
+assert property (arst_ctr_reset);
+
+property arst_scl_oe;
+  @(posedge wb_clk_i) (arst_i == ARST_LVL) |-> (scl_pad_oe == 1'b1);
+endproperty
+assert property (arst_scl_oe);
+
+property arst_sda_oe;
+  @(posedge wb_clk_i) (arst_i == ARST_LVL) |-> (sda_pad_oe == 1'b1);
+endproperty
+assert property (arst_sda_oe);
+
+// Width assertion added for completeness
+property arst_i_width;
+  @(posedge wb_clk_i) arst_i inside {1'b0, 1'b1};
+endproperty
+assert property (arst_i_width);
+```

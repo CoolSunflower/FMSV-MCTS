@@ -1,0 +1,95 @@
+<think>
+Okay, let's tackle generating the SVAs for wb_dat_o. First, I need to make sure I understand all the requirements from the specification and the previous feedback. 
+
+Starting with the width assertion. The signal is 8 bits, so that's straightforward. I'll check that the width is always 8 using $bits.
+
+Next, connectivity. The WISHBONE interface requires wb_stb_i and wb_cyc_i to be active for a valid transaction. Since each access takes two cycles, the data should be valid when wb_ack_o is high, which happens in the second cycle. So, I need to ensure that when wb_ack_o is asserted, the data corresponds to the address from the previous cycle. Using $past(wb_adr_i, 1) makes sense here.
+
+For functionality, each register read must match the addressed register. The prescale registers (PRERlo and PRERhi), control register (CTR), receive register (RXR), and status register (SR) all have specific addresses. Also, after a reset, these registers should return their default values. The reset can be either asynchronous (arst_i) or synchronous (wb_rst_i), so I need to check both.
+
+Stability is another factor. Since wb_dat_o is registered, it should hold its value when not in a read cycle. So, an assertion for stability when wb_ack_o is low is necessary.
+
+The command register (CR) is write-only, but reading its address (0x04) should return the status register. This needs an explicit check to avoid confusion.
+
+Also, the prescale registers should be readable even when the core is disabled (ctr[0] == 0). Adding an assertion for that ensures accessibility under different conditions.
+
+Putting it all together, I'll structure the SVAs to cover width, connectivity with proper handshake signals, functionality with past addresses, reset values, stability, and accessibility. Each assertion should be clear and handle the two-cycle access correctly.
+</think>
+
+[REASONING]  
+1. **Width Check**: Ensure `wb_dat_o` is always 8 bits wide.  
+2. **Connectivity**: Verify data validity during acknowledged reads with WISHBONE handshake signals.  
+3. **Functionality**:  
+   - Map addresses to registers using 2-cycle timing (`$past`).  
+   - Check reset values for all registers (PRER=0xFFFF, others=0x00).  
+4. **Stability**: Ensure `wb_dat_o` remains stable during non-acknowledged cycles.  
+5. **Accessibility**: Confirm prescale registers are readable when core is disabled.  
+
+[SVAs]  
+```systemverilog
+// Width assertion
+assert property (@(posedge wb_clk_i) $bits(wb_dat_o) == 8);
+
+// Connectivity: Valid data during acknowledged read
+property wb_dat_o_connectivity;
+  @(posedge wb_clk_i)
+  (wb_stb_i && wb_cyc_i && wb_ack_o && !wb_we_i) |-> !$isunknown(wb_dat_o);
+endproperty
+assert property (wb_dat_o_connectivity);
+
+// Functionality: Register read checks with 2-cycle timing
+property PRERlo_read;
+  @(posedge wb_clk_i)
+  (wb_ack_o && $past(wb_adr_i,1) == 2'h00 && !wb_we_i) |-> (wb_dat_o == prer[7:0]);
+endproperty
+assert property (PRERlo_read);
+
+property PRERhi_read;
+  @(posedge wb_clk_i)
+  (wb_ack_o && $past(wb_adr_i,1) == 2'h01 && !wb_we_i) |-> (wb_dat_o == prer[15:8]);
+endproperty
+assert property (PRERhi_read);
+
+property CTR_read;
+  @(posedge wb_clk_i)
+  (wb_ack_o && $past(wb_adr_i,1) == 2'h02 && !wb_we_i) |-> (wb_dat_o == ctr);
+endproperty
+assert property (CTR_read);
+
+property RXR_read;
+  @(posedge wb_clk_i)
+  (wb_ack_o && $past(wb_adr_i,1) == 2'h03 && !wb_we_i) |-> (wb_dat_o == rxr);
+endproperty
+assert property (RXR_read);
+
+property SR_read;
+  @(posedge wb_clk_i)
+  (wb_ack_o && $past(wb_adr_i,1) == 2'h04 && !wb_we_i) |-> (wb_dat_o == sr);
+endproperty
+assert property (SR_read);
+
+// Reset checks for all registers
+property reset_values;
+  @(posedge wb_clk_i)
+  (arst_i == !ARST_LVL || wb_rst_i) |=> 
+  ((wb_adr_i == 2'h00 && wb_dat_o == 8'hFF) ||  // PRERlo reset
+   (wb_adr_i == 2'h01 && wb_dat_o == 8'hFF) ||  // PRERhi reset
+   (wb_dat_o == 8'h00));                        // Other registers
+endproperty
+assert property (reset_values);
+
+// Stability during non-acknowledged reads
+property data_stability;
+  @(posedge wb_clk_i)
+  (!wb_ack_o && !wb_we_i) |=> $stable(wb_dat_o);
+endproperty
+assert property (data_stability);
+
+// Prescale accessibility when core is disabled
+property prer_accessibility;
+  @(posedge wb_clk_i)
+  (ctr[0] == 0 && wb_adr_i inside {2'h00,2'h01} && wb_stb_i && wb_cyc_i) |-> 
+  ##1 (wb_ack_o && wb_dat_o == ($past(wb_adr_i,1)[0] ? prer[15:8] : prer[7:0]));
+endproperty
+assert property (prer_accessibility);
+```

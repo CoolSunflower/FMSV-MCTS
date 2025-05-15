@@ -1,0 +1,136 @@
+<think>
+Okay, I need to extract all unique and valid assertions related to the signal 'intr' from the provided list. Let's go through each assertion one by one.
+
+First assertion: property intr_reset_p; @(posedge clk_i) !rst_ni |-> !intr; endproperty assert property (intr_reset_p);
+This checks that when reset is inactive (!rst_ni), the interrupt should be low. Since intr is a single bit here, this seems applicable for a single timer setup.
+
+Second: localparam N_TIMERS =1; assert property (@(posedge clk_i) $bits(intr[i]) ==1);
+Wait, the variable 'i' isn't defined here. But maybe in the context, since N_TIMERS is 1, it's intr[0]. This checks the bit width of each intr element. Important for width check.
+
+Third: localparam N_TIMERS=1; assert property (@(posedge clk_i) !rst_ni |-> !intr[i]);
+Again, uses 'i', but assuming i loops from 0 to N_TIMERS-1, which is 0 here. So this is similar to the first assertion but for each timer. But since N_TIMERS is 1, this might be redundant with the first if intr is a single bit. However, if intr is an array, this checks each element.
+
+Fourth: localparam N_TIMERS=1; assert property (@(posedge clk_i) rst_ni |-> (intr[i] == (mtime >= mtimecmp[i])));
+Checks that when reset is active, the interrupt reflects the comparison between mtime and mtimecmp. Functional check.
+
+Fifth: localparam N_TIMERS=1; assert property (@(posedge clk_i) !rst_ni || !active |-> !intr[i]);
+Says that if either reset is inactive or not active, interrupt is low. Combines reset and active signals.
+
+Sixth: property intr_func_p; @(posedge clk_i) disable iff (!rst_ni || !active) $rose(tick) |=> (intr[i] == (mtime >= mtimecmp[i])); endproperty assert property (intr_func_p);
+After a tick rises, the interrupt should update based on mtime comparison. Functional check after tick.
+
+Now, check for uniqueness. The first and third assertions seem similar but the first applies to the entire intr (if it's a single bit), while the third uses [i], which for N_TIMERS=1 would be intr[0]. If the intr is an array of size 1, then both may be same. But depending on how the signal is declared, this could differ. However, the user says to retain all unique ones. So perhaps they are different because the third uses an index.
+
+The fourth and sixth assertions both check the functional aspect. Fourth checks whenever reset is active, the intr is as expected. The sixth checks after a tick, the intr updates correctly. Both are important.
+
+The second assertion is crucial for checking the width of each intr element. Since the documentation mentions configurable timers, ensuring each intr is 1-bit is necessary.
+
+Now, the fifth assertion checks when either reset is inactive or active is low, the interrupt is low. That's a different condition than the first and third, which only check reset.
+
+So all these are unique in their conditions. But need to check if they are valid given the design. For example, the second assertion uses $bits(intr[i]) which should be 1, aligning with documentation which says each timer per hart has one interrupt. So that's valid.
+
+The first assertion's trigger is !rst_ni, which is when reset is inactive (since rst_ni is active-low). So during reset (rst_ni is 0), the assertion would check that intr is low. Wait, the property says "!rst_ni |-> !intr", so when !rst_ni is true (rst_ni is 0, meaning reset is active), then intr should be low. That makes sense: during reset, interrupt should be deasserted. So the first assertion is correct. Similarly, the third assertion is similar but indexed. But given N_TIMERS=1, and if intr is a single bit, the third would be checking intr[0], which might not exist if intr is not an array. However, in the given SystemVerilog code, if N_TIMERS is 1, then maybe intr is declared as logic intr [N_TIMERS], making it an array of 1 element. So the third assertion is valid in that case.
+
+But the initial assertion (intr_reset_p) checks the entire intr signal, which if it's an array, would check all bits. Wait, no. The first assertion checks 'intr', which if it's an array of 1 bit, then !intr would check the entire array. But in Verilog, if you have an array and apply a logical NOT, it might do a reduction OR and then invert. So perhaps the first assertion is not correct if intr is an array. However, in the user's provided code, the second assertion uses $bits(intr[i]) which suggests that each element is 1 bit. So maybe intr is an array of 1-bit signals. Therefore, the first assertion (checking !intr) would be checking all bits of the array. But since N_TIMERS is 1, it would check that the single bit is low. However, the third assertion checks each element individually. So in that case, for N_TIMERS=1, both assertions would be redundant. But the user says to maximize retained assertions, so even if redundant, include both? But maybe the first is checking the entire array, and the third each element. But since they are possibly different, need to check.
+
+Wait, the first assertion's consequent is !intr. If intr is a 1-bit signal, then that's fine. If intr is an array of 1 element, then !intr would be equivalent to !intr[0]. So maybe the first and third are equivalent. But the user's code might have the first assertion when intr is a single bit, and the third when it's an array. Since the documentation says "configurable number of timers per hart", but in this version, it's fixed to one. So perhaps the original code uses an array for intr even when N_TIMERS=1. Therefore, the third assertion is more precise as it checks each element, but the first might not be valid if intr is an array. However, in the given assertions, the first one is present. Since the user says "do not modify the actual assertion", perhaps we have to include all unique ones even if they seem overlapping.
+
+But based on the given list, the assertions are:
+
+1. intr_reset_p: when reset is active (!rst_ni is true), then intr is 0. But wait, the syntax is !rst_ni |-> !intr. So when !rst_ni is true (meaning rst_ni is low, reset is active), then intr must be 0. That's correct for reset assertion.
+
+Third assertion: for each i, if !rst_ni (reset active), then intr[i] is 0. So for each timer, during reset, interrupt is low.
+
+If N_TIMERS is 1, then the third assertion checks intr[0]. The first assertion would check the entire intr as a vector. If intr is a vector with one bit, then these are the same. But if intr is an array of bits, then !intr would be the reduction of all bits. But maybe in the code, the first assertion is incorrect, but user wants us to include all unique ones. So perhaps both are considered unique because they are written differently.
+
+But the user says "maximise the number of retained assertions". So include all possible ones as long as they are unique.
+
+Similarly, the fifth assertion: !rst_ni || !active |-> !intr[i]. This includes both reset and active conditions. So even if reset is not active but active is low, the interrupt should be low. So different from the third assertion which only checks reset.
+
+The sixth assertion is about functionality after a tick. The fourth checks whenever reset is active, the interrupt is correct. The sixth checks after a tick, the interrupt is updated correctly.
+
+The second assertion checks the bit width of each intr[i] is 1, which is important for the signal's width.
+
+So compiling all unique assertions related to intr:
+
+1. intr_reset_p: checks on reset, entire intr is low.
+2. Second assertion: checks each intr[i] is 1-bit.
+3. Third: each intr[i] is low on reset.
+4. Fourth: when reset active, intr[i] reflects mtime >= mtimecmp[i].
+5. Fifth: intr[i] low if reset or inactive.
+6. Sixth: after tick, intr[i] updates correctly.
+
+All of these are related to intr and are unique. The second assertion is crucial for width check. The others cover reset, functionality, and other conditions. So include all of them.
+
+But wait, looking again:
+
+The original list provided by the user is:
+
+['property intr_reset_p;\n  @(posedge clk_i) !rst_ni |-> !intr;\nendproperty\nassert property (intr_reset_p);', 
+
+'localparam N_TIMERS = 1;\nassert property (@(posedge clk_i) $bits(intr[i]) == 1);', 
+
+'localparam N_TIMERS = 1;\nassert property (@(posedge clk_i) !rst_ni |-> !intr[i]);', 
+
+'localparam N_TIMERS = 1;\nassert property (@(posedge clk_i) rst_ni |-> (intr[i] == (mtime >= mtimecmp[i])));', 
+
+'localparam N_TIMERS = 1;\nassert property (@(posedge clk_i) !rst_ni || !active |-> !intr[i]);', 
+
+'localparam N_TIMERS = 1;\nproperty intr_func_p;\n    @(posedge clk_i) disable iff (!rst_ni || !active)\n    $rose(tick) |=> (intr[i] == (mtime >= mtimecmp[i]));\n  endproperty\n  assert property (intr_func_p);']
+
+So the assertions are:
+
+1. intr_reset_p: On posedge clk, if !rst_ni (reset active), then intr is 0.
+
+2. Check that $bits(intr[i]) ==1. For each i? Since N_TIMERS=1, i=0.
+
+3. For each i, if !rst_ni, then intr[i] is 0.
+
+4. For each i, if rst_ni (reset not active), then intr[i] == (mtime >= mtimecmp[i]).
+
+5. For each i, if either !rst_ni or !active, intr[i] is 0.
+
+6. For each i, after a rose(tick), intr[i] should be == (mtime >= mtimecmp[i]).
+
+These are all separate. Now, need to make sure that for the given signal 'intr', all these are valid.
+
+But the original question says to "extract all unique and valid assertions for the signal name: intr".
+
+Assuming that 'intr' is a vector of N_TIMERS bits (which is 1 here), then assertions 2,3,4,5,6 are for each element of the intr array. The first assertion applies to the entire array. If N_TIMERS is 1, then perhaps the first and third assertion are equivalent. But maybe the design has intr as a 1-bit signal when N_TIMERS=1. However, the presence of the second assertion (checking intr[i] is 1-bit) implies that intr is an array, even for N_TIMERS=1. Hence, in that case, the first assertion would check the entire array (all bits) deasserted on reset. While the third assertion checks each individual bit (but for N_TIMERS=1, it's just one bit). So maybe they are redundant. However, since the user says to maximize retained assertions, and they are written differently, perhaps both should be kept.
+
+Therefore, all the provided assertions except possibly duplicates are retained. But looking at the list, all are unique, so all six are included. Wait, but the user provided six assertions, but we need to list only unique ones. However, in the original list, there are six entries. However, some have the same localparam declarations. But each has a different condition.
+
+Therefore, the answer includes all six assertions as unique, provided they are valid. Now, need to verify validity based on the documentation.
+
+The documentation mentions that each timer per hart has an interrupt. In this version, N_TIMERS=1 and one hart. So the intr signal is likely a single bit, but in the code, it might be an array for scalability. However, the second assertion checks that each element is 1-bit, which is correct.
+
+The rest of the assertions are valid for the functionality described: reset behavior, active signal influence, and comparison with mtimecmp.
+
+Therefore, the answer includes all six assertions.
+</think>
+
+```systemverilog
+property intr_reset_p;
+  @(posedge clk_i) !rst_ni |-> !intr;
+endproperty
+assert property (intr_reset_p);
+
+localparam N_TIMERS = 1;
+assert property (@(posedge clk_i) $bits(intr[i]) == 1);
+
+localparam N_TIMERS = 1;
+assert property (@(posedge clk_i) !rst_ni |-> !intr[i]);
+
+localparam N_TIMERS = 1;
+assert property (@(posedge clk_i) rst_ni |-> (intr[i] == (mtime >= mtimecmp[i])));
+
+localparam N_TIMERS = 1;
+assert property (@(posedge clk_i) !rst_ni || !active |-> !intr[i]);
+
+localparam N_TIMERS = 1;
+property intr_func_p;
+    @(posedge clk_i) disable iff (!rst_ni || !active)
+    $rose(tick) |=> (intr[i] == (mtime >= mtimecmp[i]));
+  endproperty
+  assert property (intr_func_p);
+```

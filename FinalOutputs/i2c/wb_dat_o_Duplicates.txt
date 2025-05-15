@@ -1,0 +1,136 @@
+assert property (@(posedge wb_clk_i) $bits(wb_dat_o) == 8);
+
+property wb_dat_o_connectivity;
+  @(posedge wb_clk_i)
+  (wb_stb_i && wb_cyc_i && wb_ack_o && !wb_we_i) |-> !$isunknown(wb_dat_o);
+endproperty
+assert property (wb_dat_o_connectivity);
+
+property reset_values;
+  @(posedge wb_clk_i)
+  (arst_i == !ARST_LVL || wb_rst_i) |=> 
+  (wb_dat_o == 8'hFF && wb_adr_i == 2'h00 ||  // PRERlo reset
+   wb_dat_o == 8'hFF && wb_adr_i == 2'h01 ||  // PRERhi reset
+   wb_dat_o == 8'h00);                        // Other registers
+endproperty
+assert property (reset_values);
+
+property data_stability;
+  @(posedge wb_clk_i)
+  !wb_ack_o |=> $stable(wb_dat_o);
+endproperty
+assert property (data_stability);
+
+property prer_accessibility;
+  @(posedge wb_clk_i)
+  (ctr[0] == 0 && wb_adr_i inside {2'h00,2'h01}) |-> 
+  ##1 (wb_ack_o && wb_dat_o == (wb_adr_i[0] ? prer[15:8] : prer[7:0]));
+endproperty
+assert property (prer_accessibility);
+
+property PRERlo_read;
+  @(posedge wb_clk_i)
+  (wb_ack_o && $past(wb_adr_i,1) == 2'h00 && !wb_we_i) |-> (wb_dat_o == prer[7:0]);
+endproperty
+assert property (PRERlo_read);
+
+property PRERhi_read;
+  @(posedge wb_clk_i)
+  (wb_ack_o && $past(wb_adr_i,1) == 2'h01 && !wb_we_i) |-> (wb_dat_o == prer[15:8]);
+endproperty
+assert property (PRERhi_read);
+
+property CTR_read;
+  @(posedge wb_clk_i)
+  (wb_ack_o && $past(wb_adr_i,1) == 2'h02 && !wb_we_i) |-> (wb_dat_o == ctr);
+endproperty
+assert property (CTR_read);
+
+property RXR_read;
+  @(posedge wb_clk_i)
+  (wb_ack_o && $past(wb_adr_i,1) == 2'h03 && !wb_we_i) |-> (wb_dat_o == rxr);
+endproperty
+assert property (RXR_read);
+
+property SR_read;
+  @(posedge wb_clk_i)
+  (wb_ack_o && $past(wb_adr_i,1) == 2'h04 && !wb_we_i) |-> (wb_dat_o == sr);
+endproperty
+assert property (SR_read);
+
+property reset_values;
+  @(posedge wb_clk_i)
+  (arst_i == !ARST_LVL || wb_rst_i) |=> 
+  ((wb_adr_i == 2'h00 && wb_dat_o == 8'hFF) ||  // PRERlo reset
+   (wb_adr_i == 2'h01 && wb_dat_o == 8'hFF) ||  // PRERhi reset
+   (wb_dat_o == 8'h00));                        // Other registers
+endproperty
+assert property (reset_values);
+
+property data_stability;
+  @(posedge wb_clk_i)
+  (!wb_ack_o && !wb_we_i) |=> $stable(wb_dat_o);
+endproperty
+assert property (data_stability);
+
+property prer_accessibility;
+  @(posedge wb_clk_i)
+  (ctr[0] == 0 && wb_adr_i inside {2'h00,2'h01} && wb_stb_i && wb_cyc_i) |-> 
+  ##1 (wb_ack_o && wb_dat_o == (wb_adr_i[0] ? prer[15:8] : prer[7:0]));
+endproperty
+assert property (prer_accessibility);
+
+property wb_dat_o_connectivity;
+  @(posedge wb_clk_i)
+  (wb_ack_o && !wb_we_i) |-> !$isunknown(wb_dat_o);
+endproperty
+assert property (wb_dat_o_connectivity);
+
+property PRERlo_read;
+  @(posedge wb_clk_i)
+  (wb_ack_o && wb_adr_i == 2'h00 && !wb_we_i) |-> (wb_dat_o == prer[7:0]);
+endproperty
+assert property (PRERlo_read);
+
+property PRERhi_read;
+  @(posedge wb_clk_i)
+  (wb_ack_o && wb_adr_i == 2'h01 && !wb_we_i) |-> (wb_dat_o == prer[15:8]);
+endproperty
+assert property (PRERhi_read);
+
+property CTR_read;
+  @(posedge wb_clk_i)
+  (wb_ack_o && wb_adr_i == 2'h02 && !wb_we_i) |-> (wb_dat_o == ctr);
+endproperty
+assert property (CTR_read);
+
+property RXR_read;
+  @(posedge wb_clk_i)
+  (wb_ack_o && wb_adr_i == 2'h03 && !wb_we_i) |-> (wb_dat_o == rxr);
+endproperty
+assert property (RXR_read);
+
+property SR_read;
+  @(posedge wb_clk_i)
+  (wb_ack_o && wb_adr_i == 2'h04 && !wb_we_i) |-> (wb_dat_o == sr);
+endproperty
+assert property (SR_read);
+
+property SR_reset_value;
+  @(posedge wb_clk_i)
+  $rose(arst_i == !ARST_LVL) |=> (sr == 8'h00);
+endproperty
+assert property (SR_reset_value);
+
+property PRERlo_read;
+  @(posedge wb_clk_i)
+  (wb_ack_o && !wb_we_i) |-> (wb_dat_o == (
+    ($past(wb_adr_i,1) == 3'h00) ? prer[7:0] :
+    ($past(wb_adr_i,1) == 3'h01) ? prer[15:8] :
+    ($past(wb_adr_i,1) == 3'h02) ? ctr :
+    ($past(wb_adr_i,1) == 3'h04) ? rxr : 
+    ($past(wb_adr_i,1) == 3'h06) ? sr : 8'h00
+  ));
+endproperty
+assert property (PRERlo_read);
+

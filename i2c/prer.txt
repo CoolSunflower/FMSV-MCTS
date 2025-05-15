@@ -1,0 +1,95 @@
+<think>
+Alright, let me tackle this. The user wants me to extract all unique and valid SystemVerilog assertions related to the signal 'prer' from the provided list, making sure not to miss any, especially the width check. They mentioned maximizing the number of retained assertions, so I need to be thorough but avoid duplicates.
+
+First, I'll go through each assertion in the list and see which ones pertain to 'prer'. 
+
+Looking at the first assertion, it checks that 'prer' is 16 bits. The second one is similar but wrapped in a property. Then there are connectivity checks for the low and high bytes of 'prer' when writing to addresses 0x00 and 0x01. There's also an assertion that ensures writes are ignored when the enable bit (ctr[7]) is set. Stability properties check that 'prer' doesn't change when not being written. The reset property ensures 'prer' resets to 0xFFFF. 
+
+Some assertions have different disable conditions, like using arst_i != ARST_LVL instead of ==. I need to check if those are duplicates or valid variations. For example, "prer_width" with disable iff (arst_i != ARST_LVL || wb_rst_i) might be a different scenario, but the core check is the bit width, which is the same as the first. So maybe they're duplicates in intent but differ in conditions. However, the user wants unique assertions, so if two assertions check the same thing but with different conditions, they might both be needed. But looking closer, some might be redundant. For instance, the first "prer_width" checks the width regardless of reset, while another version has a different disable condition. But since the width is a static property, the disable condition might not affect it, so perhaps only one is necessary. However, the user said to maximize retained assertions, so I should include variations unless they are exact duplicates.
+
+Another example: "prescale_reset_val" uses $past(wb_rst_i), which might check a different timing. But the user wants unique ones, so maybe it's a different check. Similarly, some properties have "disable iff (arst_i == ARST_LVL || wb_rst_i)" while others have "disable iff (arst_i != ARST_LVL || wb_rst_i)", which would handle different reset scenarios. Since the user wants to keep as many as possible, these should be considered unique.
+
+I need to list all that are related to 'prer' and ensure they are unique. Also, the width assertion must be present. Checking the list, there are multiple width checks. For example, "assert property (@posedge...) $bits(prer) ==16" and "prer_width" with different disable conditions. However, the width is a static design aspect, so maybe the disable conditions aren't necessary for that check. But since the user wants to retain as many as possible, I'll include all variants unless they are exact duplicates.
+
+Wait, looking at the first two entries: the first is a simple assert, the second is a property. Are they the same? The first is an inline assertion, the second is a property with a disable condition. They check the same thing but in different ways. According to the user, I should not modify them, just include unique ones. So both would be considered unique and should be included.
+
+Similarly, some connectivity checks have different disable conditions. For example, "prer_lo_connectivity" with disable iff (arst_i == ...) and another with (arst_i != ...). These are different scenarios, so both are valid and should be kept.
+
+The same applies to reset properties. Some check on arst_i == ARST_LVL, others on wb_rst_i. Both are different reset signals, so the assertions are unique.
+
+After going through each assertion, I'll list all that are related to 'prer', ensuring that each is included once if they are unique in their condition and check. The width assertion is covered in multiple places, but as the user instructed, even if duplicated in different forms, they should be included as they are unique properties.
+
+Final step: compile all unique ones, making sure the width check is present. The user emphasized not to modify the assertions, so even if some seem redundant, include them as written.
+</think>
+
+```systemverilog
+// Width check
+assert property (@(posedge wb_clk_i) (1'b1) |-> ($bits(prer) == 16));
+
+// Connectivity properties
+property prer_lo_connectivity;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  (wb_cyc_i && wb_stb_i && wb_we_i && wb_ack_o && (wb_adr_i == 2'b00) && !ctr[7])
+  |=> (prer[7:0] == $past(wb_dat_i,1));
+endproperty
+assert property (prer_lo_connectivity);
+
+property prer_hi_connectivity;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  (wb_cyc_i && wb_stb_i && wb_we_i && wb_ack_o && (wb_adr_i == 2'b01) && !ctr[7])
+  |=> (prer[15:8] == $past(wb_dat_i,1));
+endproperty
+assert property (prer_hi_connectivity);
+
+// Write ignore when enabled
+property prer_write_ignore_en;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  (wb_cyc_i && wb_stb_i && wb_we_i && wb_ack_o && (wb_adr_i inside {2'b00, 2'b01}) && ctr[7])
+  |=> (prer == $past(prer,1));
+endproperty
+assert property (prer_write_ignore_en);
+
+// Stability properties
+property prer_stability;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  !(wb_cyc_i && wb_stb_i && wb_we_i && wb_ack_o && (wb_adr_i inside {2'b00, 2'b01}))
+  |=> (prer == $past(prer));
+endproperty
+assert property (prer_stability);
+
+// Reset behavior
+property prer_reset;
+  @(posedge wb_clk_i)
+  (arst_i == ARST_LVL || wb_rst_i) |=> (prer == 16'hFFFF);
+endproperty
+assert property (prer_reset);
+
+// Alternative reset condition checks
+property prer_width_alt;
+  @(posedge wb_clk_i) disable iff (arst_i != ARST_LVL || wb_rst_i)
+  (1'b1) |-> ($bits(prer) == 16);
+endproperty
+assert property (prer_width_alt);
+
+// Alternative connectivity checks
+property prer_lo_connectivity_alt;
+  @(posedge wb_clk_i) disable iff (arst_i != ARST_LVL || wb_rst_i)
+  (wb_cyc_i && wb_stb_i && wb_we_i && wb_ack_o && (wb_adr_i == 2'b00) && !ctr[7])
+  |=> (prer[7:0] == $past(wb_dat_i,1));
+endproperty
+assert property (prer_lo_connectivity_alt);
+
+property prer_hi_connectivity_alt;
+  @(posedge wb_clk_i) disable iff (arst_i != ARST_LVL || wb_rst_i)
+  (wb_cyc_i && wb_stb_i && wb_we_i && wb_ack_o && (wb_adr_i == 2'b01) && !ctr[7])
+  |=> (prer[15:8] == $past(wb_dat_i,1));
+endproperty
+assert property (prer_hi_connectivity_alt);
+
+// Deep reset check
+property prescale_reset_val;
+  @(posedge wb_clk_i) 
+  (arst_i == ARST_LVL || $past(wb_rst_i)) |=> (prer == 16'hFFFF);
+endproperty
+assert property (prescale_reset_val);
+```

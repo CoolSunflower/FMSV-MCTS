@@ -1,0 +1,126 @@
+assert property (@(posedge wb_clk_i) $bits(ctr) == 8);
+
+property p_ctr_write_connectivity;
+  @(posedge wb_clk_i) disable iff (wb_rst_i || (arst_i != ARST_LVL))
+  (wb_we_i && wb_stb_i && wb_cyc_i && (wb_adr_i == 2'h02)) 
+  |=> (ctr == (wb_dat_i & 8'hC0)); // Mask reserved bits 5:0
+endproperty
+assert property (p_ctr_write_connectivity);
+
+property p_ctr_reserved_zero;
+  @(posedge wb_clk_i) disable iff (wb_rst_i || (arst_i != ARST_LVL))
+  (ctr[5:0] == 6'h0);
+endproperty
+assert property (p_ctr_reserved_zero);
+
+property p_en_clear_safety;
+  @(posedge wb_clk_i) disable iff (wb_rst_i || (arst_i != ARST_LVL))
+  ($fell(ctr[7]) && sr[3]) |-> ##[1:3] !sr[3]; // EN cleared only if TIP clears within 3 cycles
+endproperty
+assert property (p_en_clear_safety);
+
+property p_ien_interrupt;
+  @(posedge wb_clk_i) disable iff (wb_rst_i || (arst_i != ARST_LVL))
+  (ctr[6] && sr[0]) |-> wb_inta_o;         // IEN=1 and IF=1 must trigger interrupt
+endproperty
+assert property (p_ien_interrupt);
+
+property p_ctr_reset;
+  @(posedge wb_clk_i) 
+  (wb_rst_i || (arst_i == ARST_LVL)) |=> (ctr == 8'h00);
+endproperty
+assert property (p_ctr_reset);
+
+property p_ctr_write_connectivity;
+  @(posedge wb_clk_i) disable iff (wb_rst_i || (arst_i != ARST_LVL))
+  (wb_we_i && wb_stb_i && wb_cyc_i && (wb_adr_i == 2'h02)) 
+  ##1 (wb_ack_o) // Wait for WISHBONE ack in cycle 2
+  |=> (ctr == (wb_dat_i & 8'hC0));
+endproperty
+assert property (p_ctr_write_connectivity);
+
+property p_ctr_reserved_write;
+  @(posedge wb_clk_i) disable iff (wb_rst_i || (arst_i != ARST_LVL))
+  (wb_we_i && wb_stb_i && wb_cyc_i && (wb_adr_i == 2'h02))
+  |-> (wb_dat_i[5:0] == 6'h0);
+endproperty
+assert property (p_ctr_reserved_write);
+
+property p_ctr_reserved_read;
+  @(posedge wb_clk_i) disable iff (wb_rst_i || (arst_i != ARST_LVL))
+  (ctr[5:0] == 6'h0);
+endproperty
+assert property (p_ctr_reserved_read);
+
+property p_en_safety;
+  @(posedge wb_clk_i) disable iff (wb_rst_i || (arst_i != ARST_LVL))
+  $fell(ctr[7]) |-> !sr[3]; // TIP must be 0 when disabling
+endproperty
+assert property (p_en_safety);
+
+property p_ien_interrupt;
+  @(posedge wb_clk_i) disable iff (wb_rst_i || (arst_i != ARST_LVL))
+  (ctr[6] && sr[0]) |-> wb_inta_o;
+endproperty
+assert property (p_ien_interrupt);
+
+property p_ctr_reset;
+  @(posedge wb_clk_i) 
+  (wb_rst_i || $changed(arst_i)) |=> (ctr == 8'h00);
+endproperty
+assert property (p_ctr_reset);
+
+property p_ctr_write;
+  @(posedge wb_clk_i) disable iff (wb_rst_i || (arst_i != ARST_LVL))
+  (wb_we_i && wb_stb_i && wb_cyc_i && (wb_adr_i == 2'h02)) |=> (ctr == (wb_dat_i & 8'hC0));
+endproperty
+assert property (p_ctr_write);
+
+property p_ctr_reset_sync;
+  @(posedge wb_clk_i) $rose(wb_rst_i) |=> (ctr == 8'h00);
+endproperty
+assert property (p_ctr_reset_sync);
+
+property p_ctr_reset_async;
+  @(posedge wb_clk_i) $changed(arst_i) && (arst_i == ARST_LVL) |=> (ctr == 8'h00);
+endproperty
+assert property (p_ctr_reset_async);
+
+assert property (@(posedge wb_clk_i) $bits(wb_dati_i) == 8);
+
+assert property (@(posedge wb_clk_i) $bits(wb_adr_i) == 3);
+
+assert property (@(posedge wb_clk_i) $bits(ctr) == 8);
+
+assert property (@(posedge wb_clk_i) $bits(txr) == 8);
+
+assert property (@(posedge wb_clk_i) $bits(rxr) == 8);
+
+assert property (@(posedge wb_clk_i) !scl_pad_oe |-> scl_pad_o == 1'b1);
+
+assert property (@(posedge wb_clk_i) !sda_pad_oe |-> sda_pad_o == 1'b1);
+
+property p_cmd_mutex;
+    @(posedge wb_clk_i) disable iff (wb_rst_i)
+    $onehot0({cr[STA], cr[STO], cr[WR], cr[RD]});
+endproperty
+assert property (p_cmd_mutex);
+
+property p_prer_stability;
+    @(posedge wb_clk_i) disable iff (wb_rst_i)
+    (ctr[EN]) |-> $stable({prer_hi, prer_lo});
+endproperty
+assert property (p_prer_stability);
+
+property p_bus_busy;
+    @(posedge wb_clk_i) disable iff (wb_rst_i)
+    (sr[BUSY]) |-> (scl_pad_i === 1'b0 || sda_pad_i === 1'b0);
+endproperty
+assert property (p_bus_busy);
+
+property p_arb_lost;
+    @(posedge wb_clk_i) disable iff (wb_rst_i)
+    (sr[AL]) |-> ##1 sr[AL] == 1'b0; // AL bit auto-clears
+endproperty
+assert property (p_arb_lost);
+

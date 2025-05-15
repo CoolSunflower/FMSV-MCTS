@@ -1,0 +1,84 @@
+<think>
+Okay, let's tackle generating the SVAs for wb_stb_i. First, I need to understand the signal's role. From the spec, wb_stb_i is a 1-bit strobe that works with wb_cyc_i to validate bus cycles. The WISHBONE interface requires both to be high for a valid transaction.
+
+Starting with the basics: a width check to ensure it's 1-bit. That's straightforward using $bits.
+
+Next, connectivity. The key point is that wb_stb_i should only be active when wb_cyc_i is high. So an implication assertion where wb_stb_i being high requires wb_cyc_i to also be high.
+
+Functionality-wise, the spec says each access takes two cycles. So when both wb_stb_i and wb_cyc_i are high, wb_ack_o must assert exactly two cycles later. The previous attempt used a range (1-2 cycles), but the spec is strict about two cycles, so I'll use ##2.
+
+Stability is another factor. Once wb_stb_i is asserted, it should stay high until wb_ack_o is received. Using 'throughout' ensures it remains high during the transaction. Also, after ack, wb_stb_i should deassert, so a check for that in the next cycle.
+
+Reset conditions are important too. The core has both synchronous (wb_rst_i) and asynchronous (arst_i) resets. The assertion should check that wb_stb_i is low during reset. The asynchronous reset's polarity is set by ARST_LVL, so I need to XOR arst_i with that parameter to handle active-high or active-low correctly.
+
+Input signals like wb_adr_i, wb_dat_i, and wb_we_i must remain stable during the transaction. Using $stable with 'until' ensures they don't change until ack is received.
+
+Also, spurious acknowledgments shouldn't occur. If wb_ack_o is high, it must be because there was a valid transaction two cycles prior. Using $past checks that.
+
+Putting it all together, I need to make sure each assertion is correctly formatted, uses proper syntax, and covers all aspects from the spec. Checking for syntax issues like misplaced operators or missing declarations is crucial. Encapsulating everything in a module (though not shown here) ensures it's syntactically correct.
+
+Finally, reviewing each assertion for correctness against the spec, consistency with WISHBONE standards, and completeness in covering all necessary cases.
+</think>
+
+```systemverilog
+// Width check: Ensure wb_stb_i is strictly 1-bit wide
+assert property (@(posedge wb_clk_i) ($bits(wb_stb_i) == 1));
+
+// Connectivity: wb_stb_i only valid with active bus cycle
+property wb_stb_requires_cyc;
+  @(posedge wb_clk_i) wb_stb_i |-> wb_cyc_i;
+endproperty
+assert property (wb_stb_requires_cyc);
+
+// Core functionality: Strict 2-cycle acknowledgment
+property wb_valid_ack_timing;
+  @(posedge wb_clk_i)
+  (wb_stb_i && wb_cyc_i) |-> ##2 wb_ack_o;
+endproperty
+assert property (wb_valid_ack_timing);
+
+// Transaction integrity: Maintain strobe until acknowledgment
+property wb_stb_retention;
+  @(posedge wb_clk_i)
+  (wb_stb_i && wb_cyc_i) |-> wb_stb_i throughout (##[1:2] wb_ack_o);
+endproperty
+assert property (wb_stb_retention);
+
+// Post-acknowledgment behavior: Strobe deassertion
+property wb_stb_deassert_post_ack;
+  @(posedge wb_clk_i)
+  $rose(wb_ack_o) |=> !wb_stb_i;
+endproperty
+assert property (wb_stb_deassert_post_ack);
+
+// Reset compliance: No activity during reset states
+property wb_stb_reset_inactive;
+  @(posedge wb_clk_i)
+  (wb_rst_i || (arst_i ^ ARST_LVL)) |-> !wb_stb_i;
+endproperty
+assert property (wb_stb_reset_inactive);
+
+// Input stability: Critical signals remain constant during transaction
+property wb_input_stability;
+  @(posedge wb_clk_i)
+  (wb_stb_i && wb_cyc_i) |->
+  ($stable(wb_adr_i) && $stable(wb_dat_i) && $stable(wb_we_i)) until wb_ack_o;
+endproperty
+assert property (wb_input_stability);
+
+// Acknowledgment validation: No spurious acknowledgments
+property wb_ack_causality;
+  @(posedge wb_clk_i)
+  wb_ack_o |-> $past(wb_stb_i && wb_cyc_i, 2);
+endproperty
+assert property (wb_ack_causality);
+```
+
+**Key Features:**
+1. **Protocol Compliance:** Strict 2-cycle acknowledgment aligns with WISHBONE spec
+2. **Reset Safety:** Handles both synchronous and asynchronous resets with polarity control
+3. **Signal Integrity:** Ensures stability of control signals and data inputs during transactions
+4. **State Continuity:** Maintains strobe signal until proper acknowledgment
+5. **Anti-Spurious Checks:** Prevents invalid acknowledgments through temporal causality checks
+
+This set provides complete coverage of the WISHBONE interface requirements while maintaining strict temporal relationships and signal integrity throughout transactions.

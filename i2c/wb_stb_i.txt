@@ -1,0 +1,57 @@
+<think>
+Okay, let me tackle this step by step. The user is asking to extract all unique and valid SystemVerilog assertions related to the signal wb_stb_i from the provided list. They want to ensure maximum retention of assertions, including any width checks, and to present them without modifications.
+
+First, I need to look through each assertion provided and determine if it pertains to wb_stb_i. Let's list them out:
+
+1. **wb_stb_reset_inactive**: Checks that wb_stb_i is inactive during reset. It uses wb_stb_i in the consequent, so this is relevant.
+2. **wb_stb_cyc_connectivity**: Asserts that wb_stb_i implies wb_cyc_i. Directly involves wb_stb_i.
+3. **wb_stb_ack_response**: Ensures that after stb and cyc are high, ack comes in two cycles. Uses wb_stb_i in the antecedent.
+4. **wb_input_stability**: Checks that the inputs remain stable until ack. Mentions wb_stb_i in the antecedent.
+5. **wb_stb_retention**: Verifies that wb_stb_i stays high until ack. Directly about wb_stb_i.
+6. **wb_stb_width**: Confirms that the width of wb_stb_i is 1 bit. Exactly the width check the user emphasized.
+
+Now, check for uniqueness. All these properties have different purposes, so they are unique. Each addresses a different aspect of wb_stb_i's behavior: reset conditions, connectivity with cyc, timing of ack, input stability, retention during transaction, and signal width. None of them are duplicates.
+
+Next, ensure validity. All assertions are correctly formatted in SystemVerilog. They use appropriate operators and constructs. For example, the use of |-> for implication, disable iff for resets, and $stable for input stability.
+
+The user also mentioned that the width assertion must be present. In the list provided, there's an assertion checking the bit width of wb_stb_i, which is included. So that's covered.
+
+No modifications are needed since the user insists on not changing the assertions. Just need to list them as they are, making sure all relevant ones are included.
+
+So the final list includes all six assertions because each directly involves wb_stb_i and addresses different properties. They are all unique and valid, and the width check is present. Therefore, the answer should include all the provided assertions related to wb_stb_i.
+</think>
+
+```systemverilog
+property wb_stb_reset_inactive;
+  @(posedge wb_clk_i) (wb_rst_i || (arst_i ^ ARST_LVL)) |-> !wb_stb_i;
+endproperty
+assert property (wb_stb_reset_inactive);
+
+property wb_stb_cyc_connectivity;
+  @(posedge wb_clk_i) wb_stb_i |-> wb_cyc_i;
+endproperty
+assert property (wb_stb_cyc_connectivity);
+
+property wb_stb_ack_response;
+  @(posedge wb_clk_i) (wb_stb_i && wb_cyc_i) |-> ##2 wb_ack_o;
+endproperty
+assert property (wb_stb_ack_response);
+
+property wb_input_stability;
+  @(posedge wb_clk_i) disable iff (wb_rst_i || (arst_i ^ ARST_LVL))
+  (wb_stb_i && wb_cyc_i) |-> 
+    ($stable(wb_adr_i) && $stable(wb_dat_i) && $stable(wb_we_i)) throughout ##[0:2] wb_ack_o;
+endproperty
+assert property (wb_input_stability);
+
+property wb_stb_retention;
+  @(posedge wb_clk_i) disable iff (wb_rst_i || (arst_i ^ ARST_LVL))
+  (wb_stb_i && wb_cyc_i) |-> wb_stb_i throughout ##2 wb_ack_o;
+endproperty
+assert property (wb_stb_retention);
+
+property wb_stb_width;
+  @(posedge wb_clk_i) $bits(wb_stb_i) == 1;
+endproperty
+assert property (wb_stb_width);
+```

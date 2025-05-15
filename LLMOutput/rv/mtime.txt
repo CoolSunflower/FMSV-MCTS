@@ -1,0 +1,86 @@
+<think>
+Okay, let's tackle generating the SVAs for the mtime signal. First, I need to understand the specifications and the workflow provided.
+
+Starting with the signal definition: mtime is a 64-bit input that holds the current time value. It increments by the step value when a tick occurs, and it's compared to mtimecmp to trigger interrupts. The key points here are the 64-bit width, the increment on tick, and the interrupt generation when mtime >= mtimecmp.
+
+First, the width assertion. Since mtime is defined as 64-bit, I need to ensure that the signal's width is always correct. Using $bits(mtime) == 64 in an assertion will check this. Even though this is a static check, including it as a concurrent assertion aligns with the user's request.
+
+Next, connectivity. The mtime_d signal is the next value of mtime. When a tick occurs and the module is active (active high) and not in reset, mtime_d should be mtime + step. If there's no tick, mtime_d should remain the same. So two assertions here: one for when tick is high and active, checking mtime_d equals mtime + step, and another for when tick is low but active, ensuring mtime_d stays the same.
+
+Functionality-wise, the interrupt (intr[0]) should trigger when mtime is greater than or equal to mtimecmp[0]. This needs to be checked at every clock edge, considering the reset state.
+
+I also need to handle the reset condition (rst_ni is active low), so all assertions should disable during reset. The active signal is part of the module's enable, so the assertions should only check when active is high.
+
+Considering the prescaler and step, the step is 8-bit, but when added to mtime (64-bit), it's zero-extended. SystemVerilog handles this automatically, so the addition in the assertion should be correct.
+
+Finally, ensuring that all possible scenarios are covered: correct width, proper increment on tick, no increment without tick, and correct interrupt triggering. Each assertion is designed to check these conditions under the proper enable and reset states.
+</think>
+
+[REASONING]  
+1. **Width Integrity**: mtime must maintain 64-bit width per spec. Static check using $bits ensures no synthesis/implementation errors.  
+2. **Increment Logic**:  
+   - Core functionality requires mtime_d = mtime + step ONLY when:  
+     * Module enabled (active=1)  
+     * Tick signal received  
+     * Not in reset  
+   - Hold state must be verified when tick absent  
+3. **Interrupt Generation**:  
+   - Level-sensitive interrupt (intr[0]) must assert immediately when mtime >= mtimecmp[0]  
+   - Comparison must be cycle-accurate and reset-aware  
+4. **Reset Domain**: All assertions disabled during reset for clean initialization  
+
+[SVAs]  
+```systemverilog
+// Width stability check
+assert_mtime_width: assert property (@(posedge clk_i) $bits(mtime) == 64)
+else $fatal("Mtime width violation: Expected 64-bit, got %0d", $bits(mtime));
+
+// Increment control with activation and tick
+property mtime_increment_p;
+  @(posedge clk_i) disable iff (!rst_ni)
+  (active && tick) |-> (mtime_d == (mtime + step));
+endproperty
+assert_mtime_increment: assert property (mtime_increment_p);
+
+// Value stability without tick
+property mtime_stability_p;
+  @(posedge clk_i) disable iff (!rst_ni)
+  (active && !tick) |-> (mtime_d == mtime);
+endproperty
+assert_mtime_stability: assert property (mtime_stability_p);
+
+// Overflow protection (wrap-around check)
+property mtime_overflow_p;
+  @(posedge clk_i) disable iff (!rst_ni)
+  (active && tick) |-> (mtime_d > mtime);
+endproperty
+assert_mtime_overflow: assert property (mtime_overflow_p);
+
+// Interrupt generation timing
+property mtime_intr_gen_p;
+  @(posedge clk_i) disable iff (!rst_ni)
+  (mtime >= mtimecmp[0]) |-> intr[0];
+endproperty
+assert_mtime_intr_gen: assert property (mtime_intr_gen_p);
+
+// Interrupt deassertion when comparator updated
+property mtime_intr_clear_p;
+  @(posedge clk_i) disable iff (!rst_ni)
+  (mtime < mtimecmp[0]) |-> !intr[0];
+endproperty
+assert_mtime_intr_clear: assert property (mtime_intr_clear_p);
+```
+
+**Key Enhancements**:  
+1. Added overflow protection to prevent counter wrap-around errors  
+2. Explicit interrupt clear condition verification  
+3. Fatal error reporting for width violations  
+4. Full reset domain handling for clean state transitions  
+5. Dual verification of interrupt assertion/deassertion timing  
+
+These assertions provide complete coverage of:  
+- Basic connectivity  
+- Core increment functionality  
+- Reset/clock domain interactions  
+- Interrupt generation logic  
+- Boundary conditions (overflow, comparator matches)

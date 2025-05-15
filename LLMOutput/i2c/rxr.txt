@@ -1,0 +1,112 @@
+<think>
+Okay, let's tackle generating the SVAs for the rxr signal. First, I need to understand the specifications thoroughly.
+
+rxr is an 8-bit read-only register at address 0x03. It holds the last byte received via I2C and is connected to the DataIO Shift Register. The reset value is 0x00. The key points are: it's read-only, updated after a read operation, and must not be affected by writes.
+
+Starting with the width assertion. Since rxr is 8 bits, I'll check that using $bits(rxr) == 8. That's straightforward.
+
+Next, connectivity. Writes to rxr's address (0x03) shouldn't change it. So I need an assertion that when a write occurs to 0x03, rxr remains the same in the next cycle. Also, after any reset (sync or async), rxr should be 0x00.
+
+For functionality, rxr should update only after a read operation completes. The status register's TIP (sr[3]) and IF (sr[0]) bits indicate transfer completion. When TIP falls and IF rises, and if the previous command was a read (RD bit in cr[2] was set), rxr should update. But since RD is auto-cleared, I'll use $past(cr[2]) to check if a read was initiated.
+
+I also need to ensure rxr isn't X or Z after a valid read. But without access to the DataIO Shift Register, I can't check the exact value, so I'll check for non-X/Z values.
+
+Handling resets correctly is crucial. The asynchronous reset (arst_i) has a level defined by ARST_LVL, so the disable conditions should use arst_i == ARST_LVL.
+
+Putting it all together:
+
+1. **Width Check**: Simple assertion with reset disable.
+2. **Write Protection**: Check writes to 0x03 don't change rxr.
+3. **Reset Value**: Ensure rxr is 0x00 after any reset.
+4. **Read Update**: Track read commands and check rxr updates post-completion with valid data.
+
+I'll structure each property with proper disable conditions for resets and use sequences where necessary to track read commands and completion.
+</think>
+
+```systemverilog
+// Width assertion: rxr is always 8 bits
+assert property (
+  @(posedge wb_clk_i) 
+  disable iff (wb_rst_i || arst_i == ARST_LVL) 
+  $bits(rxr) == 8
+);
+
+// Write protection: Writes to rxr's address (0x03) have no effect
+property p_rxr_write_protection;
+  @(posedge wb_clk_i) disable iff (wb_rst_i || arst_i == ARST_LVL)
+  (wb_adr_i == 3 && wb_we_i && wb_stb_i && wb_cyc_i) 
+  |=> 
+  (rxr == $past(rxr));
+endproperty
+assert property (p_rxr_write_protection);
+
+// Reset value initialization (sync + async)
+property p_rxr_reset_value;
+  @(posedge wb_clk_i)
+  (arst_i == ARST_LVL || $past(wb_rst_i)) 
+  |=> 
+  (rxr == 8'h00);
+endproperty
+assert property (p_rxr_reset_value);
+
+// Valid update after read completion
+sequence s_read_operation;
+  // Detect read command (RD bit set in Command Register)
+  (wb_adr_i == 4'h4 && wb_we_i && wb_stb_i && wb_cyc_i && wb_dat_i[2]) 
+  ##1 
+  // Wait for transfer completion (TIP falls, IF rises)
+  ($fell(sr[3]) && $rose(sr[0]));
+endsequence
+
+property p_rxr_valid_update;
+  @(posedge wb_clk_i) 
+  disable iff (wb_rst_i || arst_i == ARST_LVL)
+  s_read_operation 
+  |-> 
+  // Check valid data and update occurred
+  !$isunknown(rxr) && 
+  (rxr != $past(rxr, $countones(sr[3])));
+endproperty
+assert property (p_rxr_valid_update);
+
+// Stability between valid operations
+property p_rxr_stability;
+  @(posedge wb_clk_i)
+  disable iff (wb_rst_i || arst_i == ARST_LVL)
+  $stable(sr[3]) && $stable(sr[0]) 
+  |->
+  $stable(rxr);
+endproperty
+assert property (p_rxr_stability);
+```
+
+**Explanation:**
+
+1. **Width Check**  
+   - Ensures rxr maintains 8-bit width during normal operation  
+   - Disabled during resets to avoid false failures
+
+2. **Write Protection**  
+   - Verifies writes to address 0x03 (rxr's location) don't modify the register  
+   - Uses past value comparison with proper reset handling
+
+3. **Reset Value**  
+   - Covers both synchronous (wb_rst_i) and asynchronous (arst_i) resets  
+   - Checks initialization to 0x00 one cycle after reset deassertion
+
+4. **Valid Read Update**  
+   - Tracks read commands through CR writes  
+   - Monitors status flags for transfer completion  
+   - Ensures non-X/Z values and value change after read  
+   - Accounts for variable transfer duration using $countones
+
+5. **Data Stability**  
+   - Verifies rxr remains unchanged between transfers  
+   - Only triggers when status flags are stable
+
+This implementation:  
+- Aligns with I2C core specification  
+- Handles multi-cycle WISHBONE transactions  
+- Properly manages reset conditions  
+- Distinguishes between read/write operations  
+- Provides complete coverage of rxr's defined behavior

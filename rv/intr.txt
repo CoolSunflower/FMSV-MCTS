@@ -1,0 +1,41 @@
+<think>
+Okay, let's see. The user wants me to extract all unique and valid assertions for the signal "intr" from the given list. The key is to maximize the number of retained assertions without modifying them. Also, ensure that assertions about the width of "intr" are present.
+
+First, looking at the provided SystemVerilog assertions. The first one is:
+
+localparam N_HARTS = 1;
+assert property (@(posedge clk_i) $bits(intr[i]) == 1);
+
+This checks that each bit of the intr array has a width of 1. Since N_HARTS is 1, it's verifying that each element in intr is a single bit. This is a width assertion and important to include.
+
+The second assertion is:
+
+localparam N_HARTS = 1;
+property intr_func_p;
+    @(posedge clk_i) disable iff (!rst_ni || !active)
+    $rose(tick[k]) |=> (intr[k] == (mtime >= mtimecmp[k]));
+endproperty
+assert property (intr_func_p);
+
+This checks that after a rising edge of tick[k], the interrupt signal intr[k] is asserted if mtime is greater than or equal to mtimecmp[k]. This is a functionality assertion for when the interrupt should trigger.
+
+Now, the user mentioned that the width assertion must be present. The first one handles that. Are there any other width-related assertions? The given list has these two, and both are unique and valid. The first deals with the width, the second with functionality.
+
+I need to check if there are duplicates or variations. In this case, both are unique. The parameters are set to N_HARTS=1, which aligns with the document stating the current version has one hart and one timer per hart. So, these assertions are valid.
+
+Also, ensure we don't miss any. The user provided two, and both are relevant to "intr". The first ensures each intr element is 1 bit, the second checks the condition under which intr is set. 
+
+No other assertions are present in the input list. Therefore, both should be included as they are unique and valid.
+</think>
+
+```systemverilog
+// Assertion for interrupt signal width per hart
+assert property (@(posedge clk_i) $bits(intr[0]) == 1);
+
+// Assertion for interrupt functionality
+property intr_func_p;
+    @(posedge clk_i) disable iff (!rst_ni || !active)
+    $rose(tick[k]) |=> (intr[k] == (mtime >= mtimecmp[k]));
+endproperty
+assert property (intr_func_p);
+```

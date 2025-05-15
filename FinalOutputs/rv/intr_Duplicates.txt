@@ -1,0 +1,24 @@
+property intr_reset_p;
+  @(posedge clk_i) !rst_ni |-> !intr;
+endproperty
+assert property (intr_reset_p);
+
+localparam N_TIMERS = 1;
+assert property (@(posedge clk_i) $bits(intr[i]) == 1);
+
+localparam N_TIMERS = 1;
+assert property (@(posedge clk_i) !rst_ni |-> !intr[i]);
+
+localparam N_TIMERS = 1;
+assert property (@(posedge clk_i) rst_ni |-> (intr[i] == (mtime >= mtimecmp[i])));
+
+localparam N_TIMERS = 1;
+assert property (@(posedge clk_i) !rst_ni || !active |-> !intr[i]);
+
+localparam N_TIMERS = 1;
+property intr_func_p;
+    @(posedge clk_i) disable iff (!rst_ni || !active)
+    $rose(tick) |=> (intr[i] == (mtime >= mtimecmp[i]));
+  endproperty
+  assert property (intr_func_p);
+

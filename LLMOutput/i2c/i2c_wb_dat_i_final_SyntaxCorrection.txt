@@ -1,0 +1,61 @@
+<think>
+Okay, let's tackle this problem step by step. The user wants me to correct the syntax of the provided SystemVerilog assertions related to the wb_dat_i signal, ensuring they adhere to the given constraints. The main issues from the error logs were undefined signals like 'wb_write_transaction' and 's_wb_write_transaction'. 
+
+First, I need to understand what 'wb_write_transaction' represents. From the WISHBONE specification, a write transaction occurs when wb_we_i is high during a valid cycle (wb_cyc_i and wb_stb_i are high). So, I should define this as a localparam or a sequence.
+
+Looking at the original assertions, they used 'wb_write_transaction' which wasn't declared. To fix this, I'll create a localparam or a sequence that captures the write transaction condition. However, since localparams can't be expressions, I'll need to use a sequence or define it inline.
+
+Next, the user mentioned that sda_padoen_o and scl_padoen_o were renamed to sda_pad_oe and scl_pad_oe, but these signals aren't directly relevant to the current assertions about wb_dat_i. So, I can focus on the WISHBONE interface signals.
+
+The errors also pointed out syntax issues like using '===' which is for 4-state logic comparisons. Since the reset level (ARST_LVL) is a parameter, using '==' is sufficient. Also, the disable iff condition should correctly reference the asynchronous reset signals, either arst_i or wb_rst_i, based on the documentation.
+
+Another issue was the use of non-declared signals. For example, 'wb_write_transaction' wasn't defined. I'll replace this with the actual condition: wb_cyc_i && wb_stb_i && wb_we_i. This represents a valid write transaction on the WISHBONE bus.
+
+Looking at each assertion:
+
+1. **data_stability**: The original used 'wb_write_transaction' and a throughout clause. I'll replace 'wb_write_transaction' with the actual condition and adjust the timing to match the WISHBONE's 2-cycle access. Using ##[1:2] to cover the two cycles.
+
+2. **ctrl_reg_reserved and cmd_reg_reserved**: These check that reserved bits are not written. Again, replace 'wb_write_transaction' with the correct condition and use the localparams for masks.
+
+3. **no_unknown_values**: Ensure that during a write, wb_dat_i has no unknown bits. Use the same write transaction condition.
+
+I'll also ensure that all assertions use the correct disable condition, checking against ARST_LVL and wb_rst_i. Using '===' might not be necessary here since these are single-bit signals, so '==' should suffice.
+
+Finally, I'll structure each assertion with proper syntax, using localparams where applicable, and inline the write transaction condition since creating new signals isn't allowed. This should resolve the syntax errors and undefined signal issues from the original assertions.
+</think>
+
+```systemverilog
+localparam CTRL_RESV_MASK = 8'hFC;
+localparam CMD_RESV_MASK = 8'hE8;
+
+// Data stability during write transactions
+property p_data_stability;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  (wb_cyc_i && wb_stb_i && wb_we_i) |-> 
+  $stable(wb_dat_i) throughout (##[1:2] wb_ack_o);
+endproperty
+assert property (p_data_stability);
+
+// Control register reserved bits
+property p_ctrl_reg_reserved;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  (wb_adr_i == 3'h2 && wb_cyc_i && wb_stb_i && wb_we_i) |-> 
+  (wb_dat_i & CTRL_RESV_MASK) == 8'h0;
+endproperty
+assert property (p_ctrl_reg_reserved);
+
+// Command register reserved bits
+property p_cmd_reg_reserved;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  (wb_adr_i == 3'h4 && wb_cyc_i && wb_stb_i && wb_we_i) |-> 
+  (wb_dat_i & CMD_RESV_MASK) == 8'h0;
+endproperty
+assert property (p_cmd_reg_reserved);
+
+// No unknown values during writes
+property p_no_unknown_values;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  (wb_cyc_i && wb_stb_i && wb_we_i) |-> !$isunknown(wb_dat_i);
+endproperty
+assert property (p_no_unknown_values);
+```

@@ -1,0 +1,116 @@
+<think>
+Okay, let me try to figure out which assertions are valid and unique for the signal wb_we_i based on the provided documentation and the list of given assertions. The user wants all unique and valid ones, especially making sure the width assertion is included.
+
+First, the documentation mentions that the WISHBONE interface is RevB.3 compliant. The signals involved here are wb_we_i, which is part of the WISHBONE interface. The WISHBONE spec says that wb_we_i is a single bit signal indicating write (1) or read (0) cycles. So the width assertion that checks $bits(wb_we_i) == 1 should definitely be included. Looking at the list, the first two assertions check the bit width. The first one is without a disable iff, the second adds disable iff (wb_rst_i). But according to WISHBONE, the width is fixed, so even during reset it should be 1 bit. However, the user just wants unique ones. Maybe both are considered unique, but maybe the second one is redundant because the width shouldn't depend on reset. Hmm, but the user says to maximize retained assertions, so maybe include both. Wait, but in reality, the width is always 1, so a disable iff might not be necessary here. However, the user specified to retain as many as possible, so perhaps include the first one. Wait, the first assertion is 'assert property (@(posedge wb_clk_i) $bits(wb_we_i) == 1);' and the second is the same but with disable iff. Maybe both are present, but are they unique? The disable iff adds a condition, so they are different. But in practice, the width is a static property and shouldn't change, so during reset the width should still be 1. Therefore, the first assertion is sufficient. However, the user wants to maximize, so maybe include both. But wait, the user says to extract unique assertions. If two assertions check the same thing but with different disable conditions, they are considered unique. So perhaps include both. But maybe the second one is redundant because during reset, the signal's width is still 1. So the first assertion is enough. However, the user's instruction says to add the width assertion if missing. Since the list already includes the first two, maybe include both.
+
+Next, looking for assertions related to wb_we_i's stability during transfers. The WISHBONE standard requires that once a cycle starts (cyc and stb asserted), the we signal must remain stable until the cycle completes (ack received). So any assertions that check $stable(wb_we_i) during the cycle are valid. From the list, there are multiple assertions checking this:
+
+- 'property wb_we_stable_p;\n ... $stable(wb_we_i) throughout (##1 wb_ack_o);'
+- 'property wb_we_stability_p;\n ... $stable(wb_we_i) throughout ... until wb_ack_o;'
+- 'property wb_we_stable_p;\n ... $stable(wb_we_i) throughout (wb_cyc_i && wb_stb_i)[->1] ...;'
+
+These seem to be variations but checking the same core requirement. However, the exact conditions may differ (e.g., some use disable iff (wb_rst_i || arst_i), others only wb_rst_i). So maybe each is unique and should be included.
+
+Then there are assertions about the ack timing. For example, after a write command (wb_we_i=1), ack should come in the next cycle. Look for assertions like 'wb_write_ack_p' with |-> ##1 wb_ack_o. There are a few versions here with different disable conditions. Need to include all unique ones.
+
+Also, there's an assertion checking that during reset, the ack isn't asserted. These are covered in properties like wb_reset_block_p, wb_reset_behavior_p, etc. These may not directly involve wb_we_i, but the user specified to focus on wb_we_i. Wait, the question says "for the signal name: wb_we_i". So perhaps only include assertions where wb_we_i is part of the property. But looking at the list, some like 'wb_reset_block_p' checks that during reset, when cyc, stb, we, and ack are all high, which is forbidden. So that does involve wb_we_i. So those should be included.
+
+Now, going through each assertion in the list:
+
+1. 'assert property (@(posedge wb_clk_i) $bits(wb_we_i) == 1);' — valid, checks width.
+2. 'assert property (@(posedge wb_clk_i) disable iff (wb_rst_i) $bits(wb_we_i) == 1);' — same check but with disable. Maybe redundant, but unique.
+3. The wb_we_stable_p properties — all check stability during transaction. Each version is different in disable conditions or the exact sequence, so unique.
+4. wb_write_ack_p — checks that after a write (wb_we_i=1), ack comes in 1 or 2 cycles. Different versions here.
+5. wb_reset_block_p — checks that during reset, you can't have a write ack. Involves wb_we_i.
+6. Others like wb_reset_behavior_p relate to ack during reset but not directly wb_we_i. Wait, no: 'wb_rst_i |-> !wb_ack_o' doesn't involve wb_we_i. So maybe exclude those unless they include wb_we_i in the antecedent.
+
+Wait, the user asked for assertions for the signal name wb_we_i, so any assertion that mentions wb_we_i in the property. For example, if an assertion checks that when wb_we_i is high, then something, then it's relevant. But if an assertion checks a general reset without involving wb_we_i, then it's not relevant.
+
+Looking at the list:
+
+- 'wb_reset_block_p' checks that during reset, there's no cyc, stb, we, and ack. So wb_we_i is part of the condition. So it's relevant.
+- 'wb_reset_effect_p' checks that during reset, ack is low. Doesn't involve wb_we_i, so not relevant.
+- 'wb_reset_write_ack_p' checks that during reset, there's no write (we_i) with ack. So that's relevant.
+
+So, need to include any assertion where wb_we_i is part of the condition.
+
+Now, compiling all unique assertions that involve wb_we_i:
+
+1. Width checks: assertions 1 and 2 from the list.
+2. Stability checks: properties that check $stable(wb_we_i) during transfers.
+3. Write ack timing: properties that when wb_we_i is high, ack follows in certain cycles.
+4. Reset conditions where wb_we_i is involved.
+
+Now, list through each assertion in the given list and see if they involve wb_we_i and are unique.
+
+1. 'assert property (@(posedge wb_clk_i) $bits(wb_we_i) == 1);' — valid.
+2. 'assert property (@(posedge wb_clk_i) disable iff (wb_rst_i) $bits(wb_we_i) == 1);' — also valid.
+3. The 'wb_we_stable_p' properties all involve wb_we_i's stability. Each has a different structure, disable condition, or sequence, so they are unique.
+4. 'wb_write_ack_p' properties check that write commands (wb_we_i=1) result in ack in next cycles.
+5. 'wb_reset_block_p' and 'wb_reset_write_ack_p' both check reset conditions involving wb_we_i.
+
+Now, check if all these are unique and valid.
+
+For example, the 'wb_we_stable_p' with different throughout clauses: 'throughout (##1 wb_ack_o)' vs. 'throughout (wb_cyc_i && wb_stb_i)[->1] ##0 wb_ack_o' are different, so they are unique.
+
+The user wants to maximize retained assertions, so include all that are valid and unique, including the width checks.
+
+Now, the answer should list all these assertions.
+</think>
+
+```systemverilog
+// Width checks
+assert property (@(posedge wb_clk_i) $bits(wb_we_i) == 1);
+assert property (@(posedge wb_clk_i) disable iff (wb_rst_i) $bits(wb_we_i) == 1);
+
+// Stability during transfers
+property wb_we_stable_p;
+  @(posedge wb_clk_i) disable iff (wb_rst_i)
+  (wb_cyc_i && wb_stb_i) |-> $stable(wb_we_i) throughout (##1 wb_ack_o);
+endproperty
+assert property (wb_we_stable_p);
+
+property wb_we_stability_p;
+  @(posedge wb_clk_i) disable iff (wb_rst_i || arst_i)
+  (wb_cyc_i && wb_stb_i) |-> $stable(wb_we_i) throughout (wb_cyc_i && wb_stb_i) until wb_ack_o;
+endproperty
+assert property (wb_we_stability_p);
+
+property wb_we_stable_p_v2;
+  @(posedge wb_clk_i) disable iff (wb_rst_i)
+  (wb_cyc_i && wb_stb_i) |-> $stable(wb_we_i) throughout (wb_cyc_i && wb_stb_i)[->1];
+endproperty
+assert property (wb_we_stable_p_v2);
+
+property wb_we_stable_p_v3;
+  @(posedge wb_clk_i) disable iff (wb_rst_i || arst_i)
+  (wb_cyc_i && wb_stb_i) |-> $stable(wb_we_i) throughout (wb_cyc_i && wb_stb_i)[->1] ##0 wb_ack_o;
+endproperty
+assert property (wb_we_stable_p_v3);
+
+// Write acknowledgment timing
+property wb_write_ack_p;
+  @(posedge wb_clk_i) disable iff (wb_rst_i)
+  (wb_cyc_i && wb_stb_i && wb_we_i) |=> ##1 wb_ack_o;
+endproperty
+assert property (wb_write_ack_p);
+
+property wb_write_ack_p_v2;
+  @(posedge wb_clk_i) disable iff (wb_rst_i || arst_i)
+  (wb_cyc_i && wb_stb_i && wb_we_i) |=> ##1 wb_ack_o;
+endproperty
+assert property (wb_write_ack_p_v2);
+
+// Reset behavior with wb_we_i
+property wb_reset_block_p;
+  @(posedge wb_clk_i)
+  wb_rst_i |-> !(wb_cyc_i && wb_stb_i && wb_we_i && wb_ack_o);
+endproperty
+assert property (wb_reset_block_p);
+
+property wb_reset_write_ack_p;
+  @(posedge wb_clk_i)
+  wb_rst_i |-> !(wb_cyc_i && wb_stb_i && wb_we_i && wb_ack_o);
+endproperty
+assert property (wb_reset_write_ack_p);
+```

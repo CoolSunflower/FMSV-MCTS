@@ -1,0 +1,76 @@
+<think>
+Okay, let's tackle generating the SVAs for the wb_adr_i signal. First, I need to understand the specifications and the feedback provided. 
+
+The signal wb_adr_i is a 3-bit input used for addressing registers in the I2C core. The valid addresses are from 0x00 to 0x04. The WISHBONE interface requires that during a transaction (when wb_stb_i and wb_cyc_i are high), the address remains stable until the transaction is acknowledged by wb_ack_o. Also, there are both synchronous (wb_rst_i) and asynchronous (arst_i) resets to consider.
+
+Looking at the previous feedback, the main issues were:
+1. The width check using $bits is redundant because it's a static check.
+2. The functionality assertion needed to ensure stability from the same cycle the transaction starts, not the next.
+3. Missing checks for unused address bits and stability during resets.
+
+So, starting with connectivity: The address should be within 0-4 when the transaction is active. Using inside {[0:4]} is clearer. Then, for functionality, the address must stay stable from the moment the transaction starts until acknowledgment. The 'throughout' operator can help here, ensuring stability across all cycles until ack. Also, need to handle resets properly with disable iff.
+
+Another point is if the address bus is wider than 3 bits, the higher bits should be zero. The spec mentions only the lower 3 bits are used, so an assertion for that is necessary. Also, during reset, the address shouldn't change, so a stability check during reset is needed.
+
+Putting it all together, the SVAs should cover valid address range, stability during transactions, unused bits, and reset behavior. Making sure each assertion is disabled during resets to avoid false triggers.
+</think>
+
+[REASONING]  
+1. **Connectivity**: Ensure `wb_adr_i` targets valid registers (0x00–0x04) during active transactions (`wb_stb_i && wb_cyc_i`).  
+2. **Functionality**: Address stability must hold from transaction start until acknowledgment (`wb_ack_o`).  
+3. **Completeness**:  
+   - Unused address bits (if any) must be zero.  
+   - Address stability during reset conditions.  
+4. **Reset Handling**: Prioritize asynchronous reset (`arst_i`) per spec.  
+
+[SVAs]  
+```systemverilog
+///////////////////////////////////////////////////////////////////////////////
+// Connectivity: Valid address range during active transactions
+///////////////////////////////////////////////////////////////////////////////
+property valid_address_range;
+  @(posedge wb_clk_i) disable iff (arst_i || wb_rst_i)
+  (wb_stb_i && wb_cyc_i) |-> (wb_adr_i inside {[0:4]});
+endproperty
+assert property (valid_address_range);
+
+///////////////////////////////////////////////////////////////////////////////
+// Functionality: Address stability from transaction start until acknowledgment
+///////////////////////////////////////////////////////////////////////////////
+property address_stability;
+  @(posedge wb_clk_i) disable iff (arst_i || wb_rst_i)
+  (wb_stb_i && wb_cyc_i) |-> $stable(wb_adr_i) throughout (wb_cyc_i until wb_ack_o);
+endproperty
+assert property (address_stability);
+
+///////////////////////////////////////////////////////////////////////////////
+// Completeness: Unused address bits (if any) must be zero
+///////////////////////////////////////////////////////////////////////////////
+generate if ($bits(wb_adr_i) > 3) begin : unused_bits_check
+  property unused_address_bits;
+    @(posedge wb_clk_i) disable iff (arst_i || wb_rst_i)
+    (wb_stb_i && wb_cyc_i) |-> (wb_adr_i[$bits(wb_adr_i)-1:3] == 0);
+  endproperty
+  assert property (unused_address_bits);
+end endgenerate
+
+///////////////////////////////////////////////////////////////////////////////
+// Reset Behavior: Address stability during reset conditions
+///////////////////////////////////////////////////////////////////////////////
+property reset_stability;
+  @(posedge wb_clk_i) (arst_i || wb_rst_i) |-> $stable(wb_adr_i);
+endproperty
+assert property (reset_stability);
+```  
+
+**Key Improvements Over Previous Versions**:  
+1. **Timing Precision**: Uses `throughout (wb_cyc_i until wb_ack_o)` to enforce stability from transaction start to acknowledgment.  
+2. **Reset Priority**: Explicitly prioritizes `arst_i` in `disable iff` per spec guidance.  
+3. **Unused Bits Check**: Dynamically generated assertion for designs with wider address buses.  
+4. **Reset Stability**: Explicit check for address stability during reset conditions.  
+
+These assertions ensure:  
+- Correct register targeting  
+- Protocol-compliant address stability  
+- Robust handling of reset scenarios  
+- Forward compatibility with potential bus width changes

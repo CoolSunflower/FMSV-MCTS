@@ -1,0 +1,402 @@
+<think>
+Okay, let's tackle this problem step by step. The user provided some SystemVerilog assertions that have syntax errors, and they want them fixed based on the given documentation. The main issues seem to be related to undefined signals like 'last_cmd_is_wr' and possibly incorrect signal names.
+
+First, I need to understand the original assertions. The first one, p_write_oe, checks that when the status register's TIP bit (sr[3]) is high and the last command was a write, the SDA output enable (sda_pad_oe) should be low, meaning the master is driving the line. The error here is that 'last_cmd_is_wr' isn't declared anywhere in the provided documentation.
+
+Looking at the documentation, the Command Register (CR) has bits for RD and WR. Specifically, bit 2 is RD and bit 3 is WR. These bits are cleared automatically after the command is processed. So, instead of tracking a 'last_cmd_is_wr' signal, maybe we can use the WR bit in the Command Register (cr[3]) directly. But since WR is cleared after the command is issued, we might need to check if a WR command was issued when TIP is active.
+
+Wait, the status register's TIP bit (sr[3]) indicates a transfer in progress. So during a transfer, if the command was a write (WR bit was set), then sda_pad_oe should be driven. But since the WR bit is auto-cleared, perhaps we need to look at the state of the command when TIP is active.
+
+Alternatively, maybe the core has a signal that indicates the current operation is a write. But according to the documentation, the only way to determine if it's a write is by the WR bit in the command register. However, since WR is cleared after the command starts, we can't directly use cr[3] once TIP is high.
+
+Hmm, this is tricky. The documentation mentions that the Command Register's STA, STO, RD, WR, and IACK bits are cleared automatically. So during a transfer, the RD or WR bits might not be set anymore. Therefore, the original assertion using 'last_cmd_is_wr' is referencing a signal that doesn't exist in the design.
+
+To fix this, perhaps we need to infer the command type based on whether the last command issued was a WR or RD. Since the core's state machine processes these commands, maybe we can track the current operation. For example, when a WR command is issued (cr[3] is set), and TIP becomes high, the operation is a write. Similarly for RD.
+
+But without adding new signals, how can we track this? The user mentioned we can't create new signals, so we have to use existing ones. The documentation shows that the Command Register (CR) has the WR and RD bits, even though they are cleared after the command starts. So maybe when TIP is high, we can check the history of the CR's WR and RD bits.
+
+Wait, but since the bits are cleared, once TIP is high, cr[3] and cr[2] would be 0. So we can't directly use them. This suggests that the original assertions were using a signal that's not present in the design, leading to the 'last_cmd_is_wr' not being declared error.
+
+To resolve this, perhaps we need to use the fact that during a write operation, the Transmit Register is used, and during a read, the Receive Register is used. But how does that relate to the SDA output enable?
+
+Looking at the external connections section, sda_pad_oe is the output enable for SDA. The master should drive SDA during write phases and release it during read phases. The core's operation would involve driving SDA when transmitting (address or data) and releasing it when receiving.
+
+The documentation for the Transmit Register mentions that during a write, the data is placed in the Transmit Register, and the WR bit is set. Similarly, for a read, the RD bit is set. So, when a WR command is issued, the master is in a write phase, and sda_pad_oe should be active (low, since it's active low enable?). Wait, the external connections show that sda_pad_oe is the output enable. The Verilog code examples use sda_padoen_oe, which when 0, drives the line. So sda_pad_oe being 0 means the master is driving SDA.
+
+So, during a write operation (when the master is sending data or address), sda_pad_oe should be 0 (output enabled), and during a read, it should be 1 (output disabled, so the slave can drive).
+
+The original assertion for p_write_oe was checking if TIP is active and last command was write, then sda_pad_oe should be 0. But since 'last_cmd_is_wr' isn't a real signal, we need to find another way.
+
+Looking at the Command Register description, when a WR command is issued, the WR bit is set, and then cleared. So perhaps when TIP is high (sr[3] is 1), the master is in a transfer, and we can determine if it's a write or read based on whether the last command was WR or RD. But since the WR/RD bits are cleared, we can't directly check them.
+
+Alternative approach: The status register's RxACK bit (sr[7]) indicates if the slave acknowledged. But that might not help here.
+
+Wait, the core's architecture includes a Byte Command Controller which handles commands. The Bit Command Controller handles the actual transmission. The DataIO Shift Register is used for sending or receiving data.
+
+Perhaps during a write operation, the master is in a state where it's shifting out data, which would mean sda_pad_oe is active. Similarly, during a read, it's shifting in, so sda_pad_oe is inactive.
+
+But how to infer this from the existing signals? The documentation mentions that the TIP bit in the status register is set during a transfer. So when TIP is high, a transfer is ongoing. The type of transfer (read or write) can be determined by whether the last command was WR or RD.
+
+But since the WR and RD bits are cleared once the command is processed, we can't directly check them during TIP. Therefore, we need to track the command type when the transfer starts.
+
+This suggests that we need to create a local variable that captures whether the last command was a write or read when TIP was asserted. However, the user mentioned we can't create new signals, but perhaps we can use a localparam or a sequence to track this.
+
+Alternatively, maybe we can use the fact that when a WR command is issued, the Transmit Register is written, and when a RD is issued, it's not. But that might not be directly observable.
+
+Wait, looking at the Command Register bits: STA, STO, RD, WR, ACK, IACK. When a transfer starts (STA is set along with WR or RD), the WR or RD bit is set, but then cleared. So, perhaps when TIP is high, the type of transfer can be determined by whether the WR or RD bit was set when the transfer started.
+
+But how to track that in assertions? Maybe using past values. For example, when TIP is high, check if in the previous cycle, the WR bit was set.
+
+But in SystemVerilog assertions, we can use $past() function. So, for example, when TIP is high, if $past(cr[3]) was 1 (WR command was issued), then it's a write transfer.
+
+But we have to ensure that the WR bit was set before TIP became high. Let's think about the sequence:
+
+1. User sets WR bit and STA bit in the Command Register.
+2. Core processes the command, starts the transfer, sets TIP high, and clears WR and STA bits.
+
+So, when TIP is high, the WR bit is already cleared. Therefore, to determine if it's a write transfer, we need to check if WR was set in the cycle before TIP went high.
+
+But how to capture that? Maybe using a sequence that triggers when TIP rises, and checks if WR was set in the previous cycle.
+
+Alternatively, use a property that when TIP is high, the WR bit was set in the past when TIP was low.
+
+This seems complicated, but possible.
+
+So, for the p_write_oe assertion: During a transfer (sr[3] is high), if the WR command was issued before TIP went high, then sda_pad_oe should be low.
+
+Similarly, for read, if RD was issued, sda_pad_oe should be high.
+
+But how to express this in assertions?
+
+Let's try for p_write_oe:
+
+property p_write_oe;
+    @(posedge wb_clk_i) 
+    (sr[3] && $past(cr[3], 1)) |-> !sda_pad_oe;
+endproperty
+
+But wait, $past(cr[3], 1) would give the value of cr[3] in the previous cycle. However, when the WR command is issued, cr[3] is set, but in the next cycle, it's cleared. So, if TIP is high now, in the previous cycle, when the command was issued, cr[3] was set. So $past(cr[3], 1) would be 1 when the command was a WR.
+
+But this depends on the timing between setting the command and TIP becoming high. Suppose the command is set in cycle t, and TIP becomes high in cycle t+1. Then $past(cr[3],1) in cycle t+1 would be 1.
+
+But if there's a delay, this might not hold. However, according to the documentation, the core responds to commands when the EN bit is set, and the TIP bit is set once the transfer starts.
+
+Assuming that when the WR command is issued (cr[3] set), the TIP bit becomes high in the next cycle, then $past(cr[3],1) would capture that.
+
+Alternatively, maybe we need to check that when TIP is high, the WR bit was set in the same cycle when the command was issued. But since the WR bit is cleared immediately, this might not be possible.
+
+Alternatively, use a sequence that captures the rising edge of TIP and checks if WR was set at that time.
+
+But TIP is a status bit that is set by the core when a transfer starts. So, when TIP transitions from 0 to 1 (rising edge), if the WR bit was set in that cycle, then it's a write transfer.
+
+But the WR bit is cleared when the command is processed, so in the cycle where TIP rises, the WR bit might already be cleared.
+
+Hmm, this is getting complicated. Maybe another approach is needed.
+
+Looking back at the original problem, the user's assertions used 'last_cmd_is_wr', which isn't a real signal. To replace this, we need to find a way to infer the command type from existing signals.
+
+Another angle: The Transmit Register is used for writes, and the Receive Register is used for reads. So, when a write command is issued, the Transmit Register has data, and for reads, the Receive Register is read. But how to link this to the SDA output enable.
+
+Alternatively, during a write transfer, the master is driving SDA, so sda_pad_oe should be active (0). During a read, the master releases SDA (sda_pad_oe is 1).
+
+The key is to determine if the current transfer is a write or read based on the command that initiated it.
+
+Since the WR and RD bits are cleared once the command is processed, perhaps we can use the fact that a write transfer is initiated by setting the WR bit, and a read by setting the RD bit. So, when TIP is high, the type of transfer is determined by whether the WR or RD bit was set when the transfer started.
+
+To track this, we can use the $past function to check the state of the WR or RD bit at the time the transfer started (when TIP transitioned from 0 to 1).
+
+For example, when TIP is high, if in the cycle where TIP became high, the WR bit was set, then it's a write transfer.
+
+But since the WR bit is cleared when the command is processed, in the cycle where TIP rises, the WR bit might already be 0. So that approach might not work.
+
+Alternative idea: Use the fact that a WR command involves writing to the Transmit Register before setting the WR bit. So, when the WR bit is set, the Transmit Register has the data to send. But again, how to link this to the assertion.
+
+Alternatively, consider that after a WR command is issued, the TIP bit is set, and during the transfer, the master drives SDA. So, during TIP, if the last command was WR, sda_pad_oe should be 0.
+
+But without a 'last_cmd_is_wr' signal, we need to infer it.
+
+Perhaps the correct approach is to use the WR and RD bits in the Command Register, but sampled at the time the command was issued. Since the WR and RD bits are strobes (set and then cleared), we can detect when they are set and track that as the command type.
+
+So, for example, when cr[3] (WR) is high, it's a write command. But since it's cleared immediately, we need to capture that event.
+
+We can define a sequence that detects the rising edge of the WR bit:
+
+sequence wr_cmd;
+    @(posedge wb_clk_i) $rose(cr[3]);
+endsequence
+
+Similarly for rd_cmd:
+
+sequence rd_cmd;
+    @(posedge wb_clk_i) $rose(cr[2]);
+endsequence
+
+Then, when TIP is high, we can check if a wr_cmd or rd_cmd was issued before.
+
+But how to track that over time. Maybe using a local variable or a property that sequences these events.
+
+Alternatively, use a property that when TIP is high, if a WR command was issued (cr[3] was high) in the past before TIP went high, then sda_pad_oe should be 0.
+
+But expressing this in SVA requires checking the historical context.
+
+Another approach: Use the fact that the WR command is followed by the TIP bit going high. So, when TIP is high, the previous command was either WR or RD.
+
+But again, without a way to track which command was issued, this is challenging.
+
+Wait, looking at the documentation's programming examples:
+
+In Example 1, to write a byte, the steps are:
+
+1. Write slave address + write bit to Transmit Register, set STA and WR bits.
+2. Wait for interrupt or TIP to negate.
+3. Check RxACK.
+4. Write data to Transmit Register, set STO and WR bits.
+5. Wait again.
+
+So, when a WR command is issued (setting WR bit), the core starts a transfer, and TIP is set. The WR bit is then cleared.
+
+Therefore, the WR bit is high for one cycle when the command is issued, and then TIP goes high in the next cycle.
+
+So, if we can detect that the WR bit was high in the cycle before TIP went high, we can infer that it's a write transfer.
+
+Similarly for RD.
+
+So, for the assertion p_write_oe, we can check that when TIP is high, the WR bit was high in the previous cycle before TIP went high.
+
+But how to capture that. Maybe using a sequence that looks for TIP rising and checks if WR was high in the previous cycle.
+
+Alternatively, use a property that when TIP is high, there was a past cycle where WR was high and TIP was low, leading to TIP going high.
+
+This seems possible with SVA's sequential operators.
+
+For example:
+
+property p_write_oe;
+    @(posedge wb_clk_i) 
+    sr[3] |-> ##1 ($past(cr[3], 1) && !$past(sr[3], 1)) throughout ##[0:$] (1)
+    |-> !sda_pad_oe;
+endproperty
+
+But this might be too complex. Alternatively, use a helper sequence to track the command type when TIP starts.
+
+sequence write_transfer;
+    // Detect WR command leading to TIP
+    !sr[3] ##1 cr[3] ##1 sr[3];
+endsequence
+
+Then, during the transfer, if it was a write_transfer, sda_pad_oe should be 0.
+
+But integrating this into the assertion might require using a property with an implication based on the sequence.
+
+Alternatively, use a sampled value of cr[3] at the time TIP started.
+
+But I'm not sure. Let's think differently.
+
+The core's state machine for the Byte Command Controller translates commands into bit operations. When a WR command is issued, the master will drive SDA during the data transfer phases.
+
+Therefore, during a WR transfer (when TIP is high), the sda_pad_oe should be active (0) except during the acknowledge phase where the slave drives.
+
+But the original assertion is simpler, checking that during a write command (last_cmd_is_wr) and TIP is high, sda_pad_oe is 0.
+
+Given that 'last_cmd_is_wr' is not a real signal, we need to replace it with something else.
+
+Alternative solution: Use the fact that during a write transfer, the master is sending data, so the sda_pad_oe is driven (0) except when waiting for the slave's ACK. But the original assertion doesn't account for that detail.
+
+But the user's assertion is a high-level check. To fix the syntax error, we need to replace 'last_cmd_is_wr' with a valid expression based on existing signals.
+
+Given that the Command Register's WR bit (cr[3]) is set when a write command is issued, but it's cleared once the command is processed, perhaps we can use the fact that a write command was issued before TIP became active.
+
+So, the assertion could be written as:
+
+property p_write_oe;
+    @(posedge wb_clk_i) 
+    (sr[3] && $past(cr[3])) |-> !sda_pad_oe;
+endproperty
+
+This checks if TIP is active and in the previous cycle, the WR bit was set. However, this might not always hold because the WR bit is cleared once the command is processed. For example, if the WR bit is set in cycle t, TIP becomes active in cycle t+1, and in cycle t+1, cr[3] is already cleared. So $past(cr[3]) in cycle t+1 would be 1 (since it's the value from cycle t), which is correct.
+
+So, in cycle t+1, sr[3] is 1 (TIP active), and $past(cr[3]) is 1 (WR was set in previous cycle). Therefore, this would correctly identify a write transfer.
+
+Similarly, for read transfers, check $past(cr[2]).
+
+So, the corrected assertions would replace 'last_cmd_is_wr' with $past(cr[3]) and 'last_cmd_is_wr' with $past(cr[2]).
+
+Let's apply this to the original assertions.
+
+First assertion:
+
+Original:
+property p_write_oe;
+    @(posedge wb_clk_i) 
+    (sr[3] && last_cmd_is_wr) |-> !sda_pad_oe;
+endproperty
+
+Corrected:
+property p_write_oe;
+    @(posedge wb_clk_i) 
+    (sr[3] && $past(cr[3])) |-> !sda_pad_oe;
+endproperty
+
+Similarly for p_read_oe:
+
+Original:
+property p_read_oe;
+    @(posedge wb_clk_i) 
+    (sr[3] && !last_cmd_is_wr) |-> sda_pad_oe;
+endproperty
+
+Corrected:
+property p_read_oe;
+    @(posedge wb_clk_i) 
+    (sr[3] && $past(cr[2])) |-> sda_pad_oe;
+endproperty
+
+But wait, cr[2] is the RD bit. So during a read transfer, the RD bit was set in the previous cycle.
+
+For the third assertion, p_ack_oe, which checks the ACK phase:
+
+Original:
+property p_ack_oe;
+    @(posedge wb_clk_i) 
+    $fell(sr[3]) |-> // TIP falling (end of transfer)
+    if (last_cmd_is_wr) 
+        sda_pad_oe // Slave ACKs WRITE (master releases)
+    else 
+        (cr[4] ? sda_pad_oe : !sda_pad_oe); // ACK=0: drive, ACK=1: release
+endproperty
+
+The user mentioned not to use 'else', so we need to split this into separate properties.
+
+But first, replace 'last_cmd_is_wr' with $past(cr[3]) at the time when TIP was high.
+
+When TIP falls (end of transfer), we need to check if the transfer was a write or read. So, before TIP fell, during the last cycle of TIP being high, whether it was a write or read.
+
+So, when $fell(sr[3]) occurs, in the previous cycle, sr[3] was high. So, in that previous cycle, if it was a write transfer ($past(cr[3],1) was high), then sda_pad_oe should be 1 (master releases for ACK). For read transfers, check the ACK bit in the command register (cr[4]).
+
+But cr[4] is the ACK bit, which is set by the user to indicate whether to send ACK or NACK.
+
+So, the corrected p_ack_oe would be split into two properties:
+
+property p_ack_oe_write;
+    @(posedge wb_clk_i) 
+    $fell(sr[3]) && $past(cr[3],1) |-> sda_pad_oe;
+endproperty
+
+property p_ack_oe_read;
+    @(posedge wb_clk_i) 
+    $fell(sr[3]) && $past(cr[2],1) |-> (cr[4] ? sda_pad_oe : !sda_pad_oe);
+endproperty
+
+But the user mentioned not to use 'else', so splitting into separate properties is acceptable.
+
+However, the original assertion used an if-else, which isn't allowed. So, splitting into two separate assertions as above.
+
+But the ACK bit (cr[4]) is part of the Command Register. For read transfers, after the data is received, the master sends an ACK or NACK by setting the ACK bit before issuing the RD command.
+
+Wait, according to the documentation, the ACK bit in the Command Register is used when the master is a receiver. So, during a read transfer, after receiving a byte, the master sends ACK (0) or NACK (1) based on the ACK bit.
+
+In the p_ack_oe assertion, when the transfer ends (TIP falls), for a read transfer, the master should drive SDA low if ACK is 0, or release it (high) if ACK is 1.
+
+But in the original code, during a read, if ACK is 0, the master drives (sda_pad_oe is 0), else releases (sda_pad_oe is 1).
+
+So, the corrected assertion for read would be:
+
+cr[4] ? sda_pad_oe : !sda_pad_oe
+
+But since we can't use if-else, we can express this using logical operators:
+
+(cr[4] && sda_pad_oe) || (!cr[4] && !sda_pad_oe)
+
+But that's equivalent to (cr[4] == sda_pad_oe). However, the original code's logic is:
+
+if (ACK is 0) drive (sda_pad_oe = 0), else release (sda_pad_oe = 1).
+
+So, sda_pad_oe should be equal to cr[4]. Because if ACK is 0, drive (oe=0), which is !cr[4]. Wait, no:
+
+Wait, cr[4] is the ACK bit. If ACK is 0, the master sends ACK (drives SDA low), so sda_pad_oe should be 0 (output enabled). If ACK is 1, master sends NACK (releases SDA, so sda_pad_oe is 1).
+
+So, sda_pad_oe should be equal to cr[4]. Because:
+
+- cr[4] = 0 → sda_pad_oe = 0 (drive)
+- cr[4] = 1 → sda_pad_oe = 1 (release)
+
+Therefore, the assertion for read transfers when TIP falls would be:
+
+sda_pad_oe == cr[4]
+
+So, the corrected p_ack_oe_read would be:
+
+property p_ack_oe_read;
+    @(posedge wb_clk_i) 
+    $fell(sr[3]) && $past(cr[2],1) |-> (sda_pad_oe == cr[4]);
+endproperty
+
+But wait, cr[4] is the current value of the ACK bit. However, when the transfer ends, the ACK bit might have been set or cleared. The ACK bit is part of the command issued after receiving the data. So, during the read transfer, after receiving the byte, the user sets the ACK bit and issues the next command.
+
+But in the cycle when TIP falls, the ACK bit would have been set appropriately for the next transfer. However, the ACK bit for the current transfer would have been set before the RD command was issued.
+
+This is getting complicated. Perhaps the ACK bit should be sampled at the time the RD command was issued.
+
+But since the user's original code uses cr[4] in the assertion, we'll proceed with that, assuming that cr[4] holds the correct value at the time the transfer ends.
+
+Putting it all together, the corrected assertions would be:
+
+For write transfers during TIP:
+property p_write_oe;
+    @(posedge wb_clk_i) 
+    (sr[3] && $past(cr[3])) |-> !sda_pad_oe;
+endproperty
+
+For read transfers during TIP:
+property p_read_oe;
+    @(posedge wb_clk_i) 
+    (sr[3] && $past(cr[2])) |-> sda_pad_oe;
+endproperty
+
+For ACK phase after write transfer:
+property p_ack_oe_write;
+    @(posedge wb_clk_i) 
+    $fell(sr[3]) && $past(cr[3],1) |-> sda_pad_oe;
+endproperty
+
+For ACK phase after read transfer:
+property p_ack_oe_read;
+    @(posedge wb_clk_i) 
+    $fell(sr[3]) && $past(cr[2],1) |-> (sda_pad_oe == cr[4]);
+endproperty
+
+But the user's original p_ack_oe had an if-else, which we split into two properties. Also, the user mentioned not to use 'else', so this approach is acceptable.
+
+Additionally, the user noted that sda_padoen_o is renamed to sda_pad_oe in the Verilog code, which we've accounted for.
+
+Finally, the user wants only the corrected assertions for sda_pad_oe. So, we'll present the three original assertions fixed with the above changes.
+</think>
+
+```systemverilog
+// Define localparam for status register bits based on documentation
+localparam SR_TIP = 3;  // Transfer in progress bit
+
+property p_write_oe;
+    @(posedge wb_clk_i)
+    (sr[SR_TIP] && $past(cr[3])) |-> !sda_pad_oe; // WR command in previous cycle
+endproperty
+assert property (p_write_oe);
+
+property p_read_oe;
+    @(posedge wb_clk_i)
+    (sr[SR_TIP] && $past(cr[2])) |-> sda_pad_oe; // RD command in previous cycle
+endproperty
+assert property (p_read_oe);
+
+property p_ack_oe_write;
+    @(posedge wb_clk_i)
+    $fell(sr[SR_TIP]) && $past(cr[3],1) |-> sda_pad_oe; // WR transfer completion
+endproperty
+assert property (p_ack_oe_write);
+
+property p_ack_oe_read;
+    @(posedge wb_clk_i)
+    $fell(sr[SR_TIP]) && $past(cr[2],1) |-> (sda_pad_oe == cr[4]); // RD transfer with ACK control
+endproperty
+assert property (p_ack_oe_read);
+```

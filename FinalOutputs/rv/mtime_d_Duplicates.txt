@@ -1,0 +1,142 @@
+assert property (@(posedge clk_i) 
+  (rst_ni && active) |-> ($bits(mtime_d) == 64));
+
+assert property (@(posedge clk_i) !rst_ni |-> mtime_d == 64'h0);
+
+assert property (@(posedge clk_i) $bits(mtime_d) == 64);
+
+property mtime_d_tick_connectivity;
+  @(posedge clk_i)
+  (rst_ni && active) |-> (tick |-> (mtime_d == (mtime + step)));
+endproperty
+assert property (mtime_d_tick_connectivity);
+
+property mtime_d_notick_connectivity;
+  @(posedge clk_i)
+  (rst_ni && active) |-> (!tick |-> (mtime_d == mtime));
+endproperty
+assert property (mtime_d_notick_connectivity);
+
+property mtime_update_connectivity;
+  @(posedge clk_i)
+  (rst_ni && active) |-> (mtime == $past(mtime_d, 1));
+endproperty
+assert property (mtime_update_connectivity);
+
+property step_zero_extension;
+  @(posedge clk_i)
+  (rst_ni && active) |-> (tick |-> (mtime_d[63:8] == mtime[63:8]));
+endproperty
+assert property (step_zero_extension);
+
+property mtime_d_reset_inactive;
+  @(posedge clk_i)
+  (!rst_ni || !active) |-> $stable(mtime_d);
+endproperty
+assert property (mtime_d_reset_inactive);
+
+property mtime_tick_connection;
+  @(posedge clk_i)
+  (rst_ni && active) |-> (tick |-> (mtime_d == (mtime + step)));
+endproperty
+assert property (mtime_tick_connection);
+
+property mtime_stable_connection;
+  @(posedge clk_i)
+  (rst_ni && active) |-> (!tick |-> (mtime_d == mtime));
+endproperty
+assert property (mtime_stable_connection);
+
+property mtime_reg_propagation;
+  @(posedge clk_i)
+  (rst_ni && active) |-> (mtime == $past(mtime_d, 1));
+endproperty
+assert property (mtime_reg_propagation);
+
+property step_carry_handling;
+  @(posedge clk_i)
+  (rst_ni && active) |-> (tick |-> 
+    mtime_d[63:8] == (mtime[63:8] + ((mtime[7:0] + step) >> 8)));
+endproperty
+assert property (step_carry_handling);
+
+property active_freeze;
+  @(posedge clk_i)
+  (active && $past(!active)) |-> (mtime_d == $past(mtime));
+endproperty
+assert property (active_freeze);
+
+property step_zero_extension;
+  @(posedge clk_i)
+  (rst_ni && active && tick) |-> 
+    mtime_d == (mtime + {{56{1'b0}}, step});
+endproperty
+assert property (step_zero_extension);
+
+property no_tick_stability;
+  @(posedge clk_i)
+  (rst_ni && active && !tick) |-> (mtime_d == mtime);
+endproperty
+assert property (no_tick_stability);
+
+property reg_update;
+  @(posedge clk_i)
+  (rst_ni && active) |=> (mtime == $past(mtime_d));
+endproperty
+assert property (reg_update);
+
+property active_freeze;
+  @(posedge clk_i)
+  !active |=> (mtime_d == $past(mtime_d));
+endproperty
+assert property (active_freeze);
+
+property reset_init;
+  @(posedge clk_i)
+  $rose(rst_ni) |=> (mtime_d == 64'h0);
+endproperty
+assert property (reset_init);
+
+property safe_addition;
+  @(posedge clk_i)
+  (rst_ni && active && tick) |-> 
+    mtime_d == (mtime + 64'(unsigned'(step)));
+endproperty
+assert property (safe_addition);
+
+property mtime_d_connectivity_tick;
+  @(posedge clk_i)
+  tick |-> (mtime_d == (mtime + step));
+endproperty
+assert property (mtime_d_connectivity_tick);
+
+property mtime_d_connectivity_no_tick;
+  @(posedge clk_i)
+  !tick |-> (mtime_d == mtime);
+endproperty
+assert property (mtime_d_connectivity_no_tick);
+
+property mtime_update;
+  @(posedge clk_i)
+  mtime == $past(mtime_d, 1);
+endproperty
+assert property (mtime_update);
+
+property mtime_d_stability;
+  @(posedge clk_i)
+  !tick |=> (mtime_d == $past(mtime_d));
+endproperty
+assert property (mtime_d_stability);
+
+property mtime_d_increment;
+  @(posedge clk_i)
+  tick |=> (mtime_d == ($past(mtime) + $past(step)));
+endproperty
+assert property (mtime_d_increment);
+
+property reset_initialization;
+  @(posedge clk_i)
+  $fell(rst_ni) |-> ##1 (rst_ni implies (mtime_d == 64'h0));
+endproperty
+assert property (reset_initialization);
+

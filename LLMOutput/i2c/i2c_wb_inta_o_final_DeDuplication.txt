@@ -1,0 +1,130 @@
+<think>
+Okay, let's tackle this problem. The user wants me to extract all unique and valid SystemVerilog assertions for the signal wb_inta_o from a given list. They mentioned the importance of retaining as many assertions as possible and ensuring that the width assertion is present.
+
+First, I need to go through each assertion in the provided list and check for uniqueness and validity. The signal in question is wb_inta_o, which is an interrupt output. Let's start by listing each assertion and see what they do.
+
+1. **Assertion 1**: Checks that when arst_i is asserted (based on ARST_LVL), wb_inta_o is low. This seems like a reset condition check.
+2. **Assertion 2**: Verifies that wb_inta_o is 1 bit wide. This is the width check, which is crucial and must be included.
+3. **Assertion 3**: A property ensuring that during reset, wb_inta_o stays low until reset is released. This is a stability check during reset.
+4. **Assertion 4**: Checks if wb_inta_o matches the past value of ctr[1] and sr[4], indicating registered output.
+5. **Assertion 5**: Checks if writing to the Command Register with IACK bit clears the interrupt. The address is masked to 3'h4, and reserved bits are zero.
+6. **Assertion 6**: Ensures that wb_rst_i resets wb_inta_o synchronously.
+7. **Assertion 7**: Links wb_inta_o to ctr[1] and sr[4] when not in reset.
+8. **Assertion 8**: Another IACK clear check, but with different conditions, possibly overlapping with 5.
+9. **Assertion 9**: Checks that wb_inta_o remains asserted until the condition changes.
+10. **Assertion 10**: Checks that arbitration loss sets the interrupt.
+11. **Assertion 11**: Another reset connectivity check, similar to 1 and 6.
+12. **Assertion 12**: Similar to 4 but with a delay.
+13. **Assertion 13**: Another version of IACK clear with different timing.
+14. **Assertion 14**: Persistence check, similar to 9.
+15. **Assertion 15**: Arbitration loss leading to interrupt with a delay.
+16. **Assertion 16**: Deassertion when conditions fall.
+17. **Assertion 17**: Reset check combining arst_i and wb_rst_i.
+18. **Assertion 18**: Functional check with a delay.
+19. **Assertion 19**: Simplified IACK clear without some conditions.
+20. **Assertion 20**: Reset condition again.
+21. **Assertion 21**: Direct functional check without delay.
+22. **Assertion 22**: Another IACK clear with different structure.
+
+Now, I need to eliminate duplicates and ensure uniqueness. For example, Assertions 1, 11, 17, 20, and 21 all deal with reset conditions but in slightly different ways. However, they might not be exact duplicates. Similarly, multiple IACK clear assertions exist but each has different conditions or timing.
+
+The width assertion (Assertion 2) must be included. Then, I need to check if each assertion addresses a different aspect. For instance, Assertion 3 is about stability during reset, while Assertion 6 is about synchronous reset. Both are valid and unique.
+
+Some assertions might be variations or stricter versions of others. For example, Assertions 4 and 12 both check registered output but with different timing (4 uses $past with 1 cycle, 12 uses |=>). They should both be kept if they cover different scenarios.
+
+After careful consideration, all listed assertions that are not exact duplicates should be retained. The key is to ensure that each unique check (width, reset conditions, functionality under normal operation, interrupt clearing, persistence, etc.) is covered without redundancy. Since the user emphasized maximizing retained assertions, I'll include all unless they are exact duplicates.
+
+Finally, the width assertion (Assertion 2) is present, so that's covered. All others seem to address different properties, so they should all be included as unique.
+</think>
+
+```systemverilog
+assert property (@(posedge wb_clk_i) ($bits(wb_inta_o) == 1));
+
+property inta_reset_stable;
+  @(posedge wb_clk_i)
+  (arst_i != ARST_LVL || wb_rst_i) |-> !wb_inta_o throughout (##[0:$] (arst_i == ARST_LVL && !wb_rst_i));
+endproperty
+assert property (inta_reset_stable);
+
+property inta_functional_registered;
+  @(posedge wb_clk_i) disable iff (arst_i != ARST_LVL || wb_rst_i)
+  wb_inta_o == $past(ctr[1] && sr[4], 1);
+endproperty
+assert property (inta_functional_registered);
+
+property inta_iack_clear_fixed;
+  @(posedge wb_clk_i) disable iff (arst_i != ARST_LVL || wb_rst_i)
+  (wb_we_i && wb_stb_i && wb_cyc_i && 
+   (wb_adr_i[2:0] == 3'h4) &&    // Command Register
+   wb_dat_i[7] &&                 // IACK bit
+   wb_dat_i[6:5] == 2'b0)         // Reserved bits
+  |=> (ctr[1] && !sr[4]);         // IF cleared
+endproperty
+assert property (inta_iack_clear_fixed);
+
+property inta_reset_sync;
+  @(posedge wb_clk_i) wb_rst_i |-> !wb_inta_o;
+endproperty
+assert property (inta_reset_sync);
+
+property inta_functionality;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  (ctr[1] && sr[4]) |-> wb_inta_o;
+endproperty
+assert property (inta_functionality);
+
+property inta_persistence;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  (ctr[1] && sr[4]) |-> wb_inta_o throughout (ctr[1] && sr[4])[->1];
+endproperty
+assert property (inta_persistence);
+
+property arbitration_loss_interrupt;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  sr[2] |-> sr[4];
+endproperty
+assert property (arbitration_loss_interrupt);
+
+property inta_reset_connectivity;
+  @(posedge wb_clk_i) 
+  (arst_i == ARST_LVL || wb_rst_i) |-> !wb_inta_o;
+endproperty
+assert property (inta_reset_connectivity);
+
+property inta_functionality_delayed;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  (ctr[1] && sr[4]) |=> wb_inta_o;
+endproperty
+assert property (inta_functionality_delayed);
+
+property inta_iack_clear_timed;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  (wb_we_i && wb_stb_i && wb_cyc_i && (wb_adr_i == 3'h4) && wb_dat_i[7])
+  ##1 wb_ack_o |=> !wb_inta_o && !sr[4];
+endproperty
+assert property (inta_iack_clear_timed);
+
+property inta_arbitration_loss;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  $rose(sr[2]) && ctr[1] |=> ##[1:2] wb_inta_o;
+endproperty
+assert property (inta_arbitration_loss);
+
+property inta_deassert;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  $fell(ctr[1] || sr[4]) |=> !wb_inta_o;
+endproperty
+assert property (inta_deassert);
+
+property inta_reset_combined;
+  @(posedge wb_clk_i or posedge arst_i)
+  (arst_i == ARST_LVL || wb_rst_i) |-> !wb_inta_o;
+endproperty
+assert property (inta_reset_combined);
+
+property inta_direct_functional;
+  @(posedge wb_clk_i) disable iff (arst_i != ARST_LVL || wb_rst_i)
+  wb_inta_o == (ctr[1] && sr[4]);
+endproperty
+assert property (inta_direct_functional);
+```

@@ -1,0 +1,91 @@
+property arst_wb_rst_mutex;
+  @(posedge wb_clk_i) !((arst_i == ARST_LVL) && wb_rst_i);
+endproperty
+assert property (arst_wb_rst_mutex);
+
+property arst_ctr_en;
+  @(posedge wb_clk_i) (arst_i == ARST_LVL) |-> (ctr[7] == 1'b0);
+endproperty
+assert property (arst_ctr_en);
+
+property arst_prer_reset;
+  @(posedge wb_clk_i) (arst_i == ARST_LVL) |-> (prer == 16'hFFFF);
+endproperty
+assert property (arst_prer_reset);
+
+property arst_txr_reset;
+  @(posedge wb_clk_i) (arst_i == ARST_LVL) |-> (txr == 8'h00);
+endproperty
+assert property (arst_txr_reset);
+
+property arst_rxr_reset;
+  @(posedge wb_clk_i) (arst_i == ARST_LVL) |-> (rxr == 8'h00);
+endproperty
+assert property (arst_rxr_reset);
+
+property arst_status_bits;
+  @(posedge wb_clk_i) (arst_i == ARST_LVL) |-> 
+    (sr[5] == 0 &&  // BUSY
+     sr[4] == 0 &&  // AL
+     sr[3] == 0 &&  // TIP
+     sr[0] == 0);   // IF
+endproperty
+assert property (arst_status_bits);
+
+property arst_inta;
+  @(posedge wb_clk_i) (arst_i == ARST_LVL) |-> (wb_inta_o == 1'b0);
+endproperty
+assert property (arst_inta);
+
+property arst_ctr_reset;
+  @(posedge wb_clk_i) (arst_i == ARST_LVL) |-> (ctr == 8'h00);
+endproperty
+assert property (arst_ctr_reset);
+
+property arst_cr_reset;
+  @(posedge wb_clk_i) (arst_i == ARST_LVL) |-> (cr == 8'h00);
+endproperty
+assert property (arst_cr_reset);
+
+property arst_status_reset;
+  @(posedge wb_clk_i) (arst_i == ARST_LVL) |-> (sr == 8'h00);
+endproperty
+assert property (arst_status_reset);
+
+property arst_scl_sda_default;
+  @(posedge wb_clk_i) (arst_i == ARST_LVL) |-> 
+    (scl_pad_o == 1'b1 && sda_pad_o == 1'b1);
+endproperty
+assert property (arst_scl_sda_default);
+
+property arst_ctr_reset;
+  @(posedge wb_clk_i) (arst_i == ARST_LVL) |-> 
+    (ctr[7] == 1'b0) &&    // EN bit cleared
+    (ctr[6] == 1'b0) &&    // IEN bit cleared
+    $stable(ctr[5:0]);      // Reserved bits unchanged
+endproperty
+assert property (arst_ctr_reset);
+
+property arst_sr_reset;
+  @(posedge wb_clk_i) (arst_i == ARST_LVL) |-> 
+    (sr[7:0] == 8'h00);  // All status bits cleared
+endproperty
+assert property (arst_sr_reset);
+
+property arst_sr_reset;
+  @(posedge wb_clk_i) (arst_i == ARST_LVL) |-> (sr == 8'h00);
+endproperty
+assert property (arst_sr_reset);
+
+localparam ARST_LVL = 1'b0;
+property arst_scl_oe;
+  @(posedge wb_clk_i) (arst_i == ARST_LVL) |-> (scl_pad_oe == 1'b1);
+endproperty
+assert property (arst_scl_oe);
+
+localparam ARST_LVL = 1'b0;
+property arst_sda_oe;
+  @(posedge wb_clk_i) (arst_i == ARST_LVL) |-> (sda_pad_oe == 1'b1);
+endproperty
+assert property (arst_sda_oe);
+

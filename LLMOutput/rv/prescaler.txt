@@ -1,0 +1,72 @@
+<think>
+Okay, let's tackle generating the SVAs for the prescaler signal. First, I need to understand the specifications thoroughly. The prescaler is a 12-bit input that determines the tick frequency. The tick generator creates a tick when its internal counter matches the prescaler value. Each tick increments the mtime register by the step value. The firmware must update the prescaler if the system clock changes, implying that the prescaler should remain stable during normal operation.
+
+Starting with the width check. The prescaler is 12 bits, so I'll use a compile-time assertion to verify this. However, since the user wants SVAs, I'll include a dynamic check using $bits, even though it's typically a compile-time check.
+
+Next, connectivity. The tick should occur every (prescaler + 1) cycles when active. Using a local variable to capture the prescaler value at the time of the tick ensures that any changes to prescaler between ticks are accounted for. The sequence should check that after p+1 cycles, the next tick occurs. However, some tools don't support variable delays in ##, so I'll use a repetition that matches the prescaler value.
+
+Functionality checks include ensuring no ticks when inactive, single-cycle tick pulses, and correct first tick timing after reset. For the first tick after reset, I need to trigger on the rising edge of active and ensure the tick occurs after prescaler + 1 cycles. Also, handling the edge case where prescaler is 0 requires a separate assertion to check continuous ticking.
+
+Stability is crucial. The prescaler shouldn't change between ticks, so an assertion checks that if prescaler changes, it only does so at tick boundaries. Reset behavior must be verified separately to ensure no ticks occur during reset.
+
+Putting it all together, I'll structure each assertion to address these points, ensuring syntax compatibility with tools by avoiding unsupported constructs like variable repetitions. Each property is disabled during reset or inactivity as specified, and edge cases are explicitly handled.
+</think>
+
+[Reasoning Process]
+1. **Width Verification**: Ensures prescaler is always 12-bit
+2. **Stability Check**: Prescaler changes only occur at tick boundaries
+3. **Tick Period Validation**: Strict (prescaler+1) cycle enforcement
+4. **Reset/Inactive States**: Comprehensive no-tick verification
+5. **Edge Cases**: Explicit handling of prescaler=0 and first tick timing
+6. **Tool Compatibility**: Avoids variable repetitions using temporal checks
+
+[Final Answer]
+```systemverilog
+// Width assertion (compile-time check recommended in practice)
+assert property (@(posedge clk_i) $bits(prescaler) == 12);
+
+// Prescaler stability between ticks
+property prescaler_stability;
+  @(posedge clk_i) disable iff (!rst_ni || !active)
+  $changed(prescaler) |-> tick;
+endproperty
+assert property (prescaler_stability);
+
+// Tick period validation (prescaler+1 cycles)
+property tick_period;
+  int p;
+  @(posedge clk_i) disable iff (!rst_ni || !active)
+  (tick, p = prescaler) |-> ##1 (!tick [*0:p-1] ##1 tick);
+endproperty
+assert property (tick_period);
+
+// No ticks during inactive/reset states
+property inactive_no_ticks;
+  @(posedge clk_i)
+  (!active || !rst_ni) |-> !tick;
+endproperty
+assert property (inactive_no_ticks);
+
+// Single-cycle tick pulses
+property tick_pulse_width;
+  @(posedge clk_i) disable iff (!rst_ni)
+  tick |-> (prescaler == 0) || ##1 !tick;
+endproperty
+assert property (tick_pulse_width);
+
+// First tick timing after activation
+property first_tick_post_activation;
+  int p;
+  @(posedge clk_i)
+  ($rose(active) && rst_ni, p = prescaler) |-> 
+  ##1 (!tick [*0:p-1] ##1 tick);
+endproperty
+assert property (first_tick_post_activation);
+
+// Zero prescaler handling (continuous ticks)
+property zero_prescaler;
+  @(posedge clk_i) disable iff (!rst_ni || !active)
+  (prescaler == 0) |-> ##1 tick;
+endproperty
+assert property (zero_prescaler);
+```

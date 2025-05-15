@@ -1,0 +1,131 @@
+assert property (@(arst_i) (arst_i == ARST_LVL) |-> !wb_inta_o);
+
+assert property (@(posedge wb_clk_i) ($bits(wb_inta_o) == 1));
+
+property inta_reset_stable;
+  @(posedge wb_clk_i)
+  (arst_i != ARST_LVL || wb_rst_i) |-> !wb_inta_o throughout (##[0:$] (arst_i == ARST_LVL && !wb_rst_i));
+endproperty
+assert property (inta_reset_stable);
+
+property inta_functional_registered;
+  @(posedge wb_clk_i) disable iff (arst_i != ARST_LVL || wb_rst_i)
+  wb_inta_o == $past(ctr[1] && sr[4], 1);
+endproperty
+assert property (inta_functional_registered);
+
+property inta_iack_clear_fixed;
+  @(posedge wb_clk_i) disable iff (arst_i != ARST_LVL || wb_rst_i)
+  (wb_we_i && wb_stb_i && wb_cyc_i && 
+   (wb_adr_i[2:0] == 3'h4) &&    // Address masking for Command Register
+   wb_dat_i[7] &&                 // IACK bit set
+   wb_dat_i[6:5] == 2'b0)         // Reserved bits are 0
+  |=> (ctr[1] && !sr[4]);         // IF cleared if IEN still enabled
+endproperty
+assert property (inta_iack_clear_fixed);
+
+property inta_reset_sync;
+  @(posedge wb_clk_i) wb_rst_i |-> !wb_inta_o;
+endproperty
+assert property (inta_reset_sync);
+
+property inta_functionality;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  (ctr[1] && sr[4]) |-> wb_inta_o;
+endproperty
+assert property (inta_functionality);
+
+property inta_iack_clear;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  (wb_we_i && wb_stb_i && wb_cyc_i && wb_ack_o && 
+   (wb_adr_i == 3'h4) && $stable(wb_dat_i[7]) && wb_dat_i[7]) 
+  |-> !wb_inta_o;
+endproperty
+assert property (inta_iack_clear);
+
+property inta_persistence;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  (ctr[1] && sr[4]) |-> wb_inta_o throughout (ctr[1] && sr[4])[->1];
+endproperty
+assert property (inta_persistence);
+
+property arbitration_loss_interrupt;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  sr[2] |-> sr[4];
+endproperty
+assert property (arbitration_loss_interrupt);
+
+property inta_reset_connectivity;
+  @(posedge wb_clk_i) 
+  (arst_i == ARST_LVL || wb_rst_i) |-> !wb_inta_o;
+endproperty
+assert property (inta_reset_connectivity);
+
+property inta_functionality;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  (ctr[1] && sr[4]) |=> wb_inta_o; // Registered output with 1-cycle delay
+endproperty
+assert property (inta_functionality);
+
+property inta_iack_clear;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  (wb_we_i && wb_stb_i && wb_cyc_i && (wb_adr_i == 3'h4) && wb_dat_i[7])
+  ##1 wb_ack_o |=> !wb_inta_o && !sr[4];
+endproperty
+assert property (inta_iack_clear);
+
+property inta_persistence;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  (ctr[1] && sr[4]) |-> wb_inta_o throughout (ctr[1] && sr[4]);
+endproperty
+assert property (inta_persistence);
+
+property inta_arbitration_loss;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  $rose(sr[2]) && ctr[1] |=> ##[1:2] wb_inta_o;
+endproperty
+assert property (inta_arbitration_loss);
+
+property inta_deassert;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  $fell(ctr[1] || sr[4]) |=> !wb_inta_o;
+endproperty
+assert property (inta_deassert);
+
+property inta_reset;
+  @(posedge wb_clk_i or posedge arst_i)
+  (arst_i == ARST_LVL || wb_rst_i) |-> !wb_inta_o;
+endproperty
+assert property (inta_reset);
+
+property inta_functional;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  (ctr[1] && sr[4]) |=> wb_inta_o; // Check assertion after register update
+endproperty
+assert property (inta_functional);
+
+property inta_iack_clear;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  (wb_we_i && wb_stb_i && wb_cyc_i && (wb_adr_i == 3'h4) && wb_dat_i[7])
+  |-> !wb_inta_o;
+endproperty
+assert property (inta_iack_clear);
+
+property inta_reset;
+  @(posedge wb_clk_i)
+  (arst_i != ARST_LVL || wb_rst_i) |-> !wb_inta_o;
+endproperty
+assert property (inta_reset);
+
+property inta_functional;
+  @(posedge wb_clk_i) disable iff (arst_i != ARST_LVL || wb_rst_i)
+  wb_inta_o == (ctr[1] && sr[4]);
+endproperty
+assert property (inta_functional);
+
+property inta_iack_clear;
+  @(posedge wb_clk_i) disable iff (arst_i != ARST_LVL || wb_rst_i)
+  (wb_we_i && wb_stb_i && wb_cyc_i && (wb_adr_i == 3'h4) && wb_dat_i[7]) |=> !wb_inta_o;
+endproperty
+assert property (inta_iack_clear);
+

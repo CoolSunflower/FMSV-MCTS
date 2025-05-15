@@ -1,0 +1,125 @@
+<think>
+Okay, let's tackle generating the SVAs for the Command Register (cr) step by step. First, I need to make sure I understand all the specifications and requirements.
+
+The cr is an 8-bit write-only register at address 0x04. The bits have specific functions:
+- Bit 7 (STA): Start condition
+- Bit 6 (STO): Stop condition
+- Bit 5 (RD): Read operation
+- Bit 4 (WR): Write operation
+- Bit 3 (ACK): Acknowledge control
+- Bit 0 (IACK): Interrupt acknowledge
+Bits 2:1 are reserved and must be written as zeros. The command bits (STA, STO, RD, WR, IACK) auto-clear after execution and read as zeros. The reset value is 0x00.
+
+Now, considering the types of SVAs needed: width, connectivity, functionality, and reset checks.
+
+1. **Width Check**: Ensure cr is 8 bits wide. This is straightforward using $bits.
+
+2. **Reserved Bits**: Any write to cr must have bits 2:1 as 0. This needs an assertion during write operations.
+
+3. **Auto-Clear of Command Bits**: After a write, STA, STO, RD, WR, IACK should clear. However, the exact timing isn't specified, but the spec says they auto-clear after execution. So, check they are 0 in the next cycle.
+
+4. **Mutual Exclusivity**: The spec doesn't explicitly forbid STA/STO or RD/WR being set together, but typically, RD and WR shouldn't be active simultaneously. However, since the spec allows command processing, maybe only check RD/WR conflict.
+
+5. **Interrupt Clear (IACK)**: Writing IACK should clear the interrupt flag (sr[0]). Need to check sr[0] is cleared after a write with IACK set.
+
+6. **Reset Value**: After reset (async or sync), cr should be 0x00. Parameterize the async reset based on ARST_LVL.
+
+7. **Reserved Bits Read**: Even though cr is write-only, if read, reserved bits should be 0. But since it's write-only, maybe this is handled by the WISHBONE interface. However, adding a read check for reserved bits ensures they aren't mistakenly used.
+
+8. **ACK Functionality**: ACK bit (bit 3) should only affect read operations. Need to ensure that when a read is active (RD set), the ACK bit drives the SDA line correctly.
+
+Now, structuring each assertion:
+
+- **Width Check**: Simple assertion using $bits.
+- **Reserved Bits on Write**: Check during write that bits 2:1 are 0.
+- **Reserved Bits on Read**: If a read occurs, ensure bits 2:1 are 0 (though cr is write-only, this is a safety check).
+- **Command Bits Auto-Clear**: After a write, check STA, STO, RD, WR, IACK are 0 in the next cycle.
+- **RD/WR Conflict**: Ensure RD and WR aren't set together.
+- **IACK Clears Interrupt**: After writing IACK, check sr[0] is 0 within 1-2 cycles.
+- **Reset Checks**: Async and sync reset checks.
+- **ACK Functionality**: Link ACK bit to SDA behavior during reads.
+
+Potential issues from previous attempts included incorrect handling of ACK in auto-clear and missing reserved bits read check. Need to correct those.
+
+Final SVAs should cover all these points without introducing new signals or assumptions beyond the spec.
+</think>
+
+[REASONING]
+1. **Width Check**: Ensure `cr` is 8 bits.
+2. **Reserved Bits**: Verify bits 2:1 are 0 on write and read.
+3. **Auto-Clear**: Command bits (STA, STO, RD, WR, IACK) must clear after a write.
+4. **Mutual Exclusivity**: Prevent RD and WR from being set simultaneously.
+5. **Interrupt Clear**: IACK write clears interrupt flag (sr[0]) within 1-2 cycles.
+6. **Reset Handling**: Check reset values for both async and sync resets.
+7. **ACK Functionality**: Ensure ACK bit drives SDA correctly during reads.
+
+[SVAs]
+```systemverilog
+// Width check
+assert property (@(posedge wb_clk_i) ($bits(cr) == 8));
+
+// Reserved bits (2:1) must be 0 on write
+property ReservedBitsWrite;
+  @(posedge wb_clk_i)
+  (wb_adr_i == 4'h4 && wb_we_i && wb_cyc_i && wb_stb_i) |-> (wb_dat_i[2:1] == 2'b00);
+endproperty
+assert property (ReservedBitsWrite);
+
+// Reserved bits (2:1) read as 0 (safety check)
+property ReservedBitsRead;
+  @(posedge wb_clk_i)
+  (wb_adr_i == 4'h4 && !wb_we_i && wb_cyc_i && wb_stb_i) |-> (wb_dat_o[2:1] == 2'b00);
+endproperty
+assert property (ReservedBitsRead);
+
+// Auto-clear command bits (STA, STO, RD, WR, IACK)
+property CommandBitsAutoClear;
+  @(posedge wb_clk_i)
+  (wb_adr_i == 4'h4 && wb_we_i && wb_cyc_i && wb_stb_i) |=> 
+  (cr[7:4] == 4'b0 && cr[0] == 0); // Excludes ACK (bit 3)
+endproperty
+assert property (CommandBitsAutoClear);
+
+// RD and WR mutual exclusivity
+property NoRD_WR_Conflict;
+  @(posedge wb_clk_i)
+  (wb_adr_i == 4'h4 && wb_we_i && wb_cyc_i && wb_stb_i) |-> !(wb_dat_i[5] && wb_dat_i[4]);
+endproperty
+assert property (NoRD_WR_Conflict);
+
+// IACK clears interrupt flag within 1-2 cycles
+property IACK_ClearsInterrupt;
+  @(posedge wb_clk_i)
+  (wb_adr_i == 4'h4 && wb_we_i && wb_cyc_i && wb_stb_i && wb_dat_i[0]) |-> 
+  ##[1:2] (sr[0] == 0);
+endproperty
+assert property (IACK_ClearsInterrupt);
+
+// Parameterized async reset check
+property CR_ResetValue_Async;
+  @(posedge wb_clk_i)
+  (ARST_LVL == 0 && $fell(arst_i)) || (ARST_LVL == 1 && $rose(arst_i)) |-> (cr == 8'h00);
+endproperty
+assert property (CR_ResetValue_Async);
+
+// Sync reset check
+property CR_ResetValue_Sync;
+  @(posedge wb_clk_i)
+  wb_rst_i |=> (cr == 8'h00);
+endproperty
+assert property (CR_ResetValue_Sync);
+
+// ACK=0: Core drives SDA low (ACK) during read
+property ACK_Low;
+  @(posedge wb_clk_i)
+  (cr[3] == 0 && cr[5]) |-> !sda_padoen_o;
+endproperty
+assert property (ACK_Low);
+
+// ACK=1: Core releases SDA (NACK) during read
+property ACK_High;
+  @(posedge wb_clk_i)
+  (cr[3] == 1 && cr[5]) |-> sda_padoen_o;
+endproperty
+assert property (ACK_High);
+```

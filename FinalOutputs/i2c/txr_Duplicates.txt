@@ -1,0 +1,81 @@
+assert property (@(posedge wb_clk_i) ($bits(txr) == 8));
+
+property TXR_WriteConnectivity;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  (wb_cyc_i && wb_stb_i && wb_we_i && (wb_adr_i == 3'h03))
+  |=> (txr == $past(wb_dat_i));
+endproperty
+assert property (TXR_WriteConnectivity);
+
+property TXR_ResetValue;
+  @(posedge wb_clk_i) (arst_i == ARST_LVL || wb_rst_i) |=> (txr == 8'h00);
+endproperty
+assert property (TXR_ResetValue);
+
+property TXR_ValidRWBit;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  $rose(cr[2]) |-> (txr[0] inside {0,1});
+endproperty
+assert property (TXR_ValidRWBit);
+
+property TXR_NoWriteDuringTIP;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  sr[3] |-> !(wb_cyc_i && wb_stb_i && wb_we_i && (wb_adr_i == 3'h03));
+endproperty
+assert property (TXR_NoWriteDuringTIP);
+
+property TXR_Stability;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  (sr[3] && $past(sr[3])) |-> $stable(txr);
+endproperty
+assert property (TXR_Stability);
+
+property TXR_WriteConnectivity;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  (wb_cyc_i && wb_stb_i && wb_we_i && (wb_adr_i == 3'h03)) ##1 wb_ack_o
+  |-> (txr == $past(wb_dat_i,2));
+endproperty
+assert property (TXR_WriteConnectivity);
+
+property TXR_ResetValue;
+  @(posedge wb_clk_i) (arst_i == ARST_LVL || wb_rst_i) |-> (txr == 8'h00);
+endproperty
+assert property (TXR_ResetValue);
+
+property TXR_ValidRWBit;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  cr[2] |-> (txr[0] inside {0,1});
+endproperty
+assert property (TXR_ValidRWBit);
+
+property TXR_Stability;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  sr[3] |-> $stable(txr);
+endproperty
+assert property (TXR_Stability);
+
+property TXR_Connectivity;
+  @(posedge wb_clk_i) disable iff (wb_rst_i || arst_i)
+  (wb_cyc_i && wb_stb_i && wb_we_i && (wb_adr_i == 3'h03)) |=> (txr == $past(wb_dat_i));
+endproperty
+assert property (TXR_Connectivity);
+
+property TXR_ValidRWBit;
+  @(posedge wb_clk_i) disable iff (wb_rst_i || arst_i)
+  $rose(cr[2]) |-> (txr[0] inside {0,1});
+endproperty
+assert property (TXR_ValidRWBit);
+
+property TXR_StabilityDuringTransfer;
+  @(posedge wb_clk_i) disable iff (wb_rst_i || arst_i)
+  (sr[3] && $past(sr[3])) |-> ($stable(txr));
+endproperty
+assert property (TXR_StabilityDuringTransfer);
+
+localparam ARST_LVL = 1'b0;
+property TXR_ShiftRegisterLoad;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  $rose(cr[4]) |-> (shift == txr); // Assuming shift register is named 'shift' in implementation
+endproperty
+assert property (TXR_ShiftRegisterLoad);
+

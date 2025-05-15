@@ -1,0 +1,70 @@
+<think>
+Okay, let's tackle generating the SVAs for clk_i. First, I need to understand the specifications and the previous feedback to ensure correctness.
+
+The clk_i is a 1-bit input clock driving the tick generator. The module uses a fixed clock, so clk_i must remain stable. The tick is generated when the internal counter matches the prescaler value, and mtime increments by the step value on each tick.
+
+From the previous attempts, there were issues with tautological assertions and handling dynamic prescaler changes. The connectivity check using $stable(tick) || $changed(tick) was a tautology. Also, the tick periodicity check didn't handle prescaler changes correctly.
+
+First, the width assertion is straightforward: check clk_i is 1-bit.
+
+For connectivity, instead of the tautology, I'll check that tick doesn't change between clock edges by using a negedge check. This ensures tick stability between posedges.
+
+For functionality, mtime should increment by step when tick is high, considering reset and active signals. Using $past ensures we capture the correct values. The tick periodicity must account for dynamic prescaler changes by using $past(prescaler) and resetting the counter after each tick. Also, the single-cycle tick assertion needs to handle prescaler=0 correctly.
+
+Including disable conditions for reset and active is crucial to avoid false failures. Also, ensuring that the step is cast to 64-bit prevents width mismatch.
+
+Finally, adding checks for clock stability and reset behavior ensures comprehensive coverage.
+</think>
+
+[REASONING]  
+1. **Width Check**: Mandatory per spec to verify 1-bit clock signal integrity.  
+2. **Clock-Tick Alignment**: Ensure tick changes only at clock edges using dual-edge checking.  
+3. **mtime Increment**: Validate timer math with explicit bit-width conversion and reset guards.  
+4. **Prescaler Periodicity**: Handle dynamic prescaler changes using sampled values and counter reset logic.  
+5. **Single-Cycle Pulse**: Allow prescaler=0 configuration while maintaining pulse integrity.  
+
+[SVAs]  
+```systemverilog
+// Width check - Fundamental signal integrity
+assert property (@(posedge clk_i) $bits(clk_i) == 1);
+
+// Clock domain alignment - Critical for timing validation
+property TICK_CLOCK_SYNC;
+    @(negedge clk_i) !$changed(tick); // Must remain stable between edges
+endproperty
+assert property (TICK_CLOCK_SYNC);
+
+// Core timer functionality - With complete reset/active handling
+property MTIME_INCREMENT;
+    @(posedge clk_i) disable iff (!rst_ni || !active)
+    tick |-> mtime_d == ($past(mtime) + 64'($past(step)));
+endproperty
+assert property (MTIME_INCREMENT);
+
+// Prescaler-driven tick generation - Full dynamic handling
+property TICK_PERIODICITY;
+    int count;
+    @(posedge clk_i) disable iff (!rst_ni || !active)
+    (1, count=0) |->
+    ##1 (1, count=($past(prescaler) == 0) ? 1 : count+1))[*0:$]
+    ##1 (count > $past(prescaler)) |-> tick ##1 (count=0);
+endproperty
+assert property (TICK_PERIODICITY);
+
+// Single-cycle pulse enforcement - Spec-compliant for prescaler=0
+property SINGLE_CYCLE_TICK;
+    @(posedge clk_i) disable iff (prescaler == 0)
+    tick |=> !tick;
+endproperty
+assert property (SINGLE_CYCLE_TICK);
+
+// Reset state validation - Critical power-on behavior
+assert property (@(posedge clk_i) !rst_ni |-> !tick);
+```  
+
+This implementation:  
+1. Eliminates tautological checks using concrete edge relationships  
+2. Handles dynamic prescaler changes with temporal operators  
+3. Enforces bit-width safety in arithmetic operations  
+4. Provides full reset/active signal coverage  
+5. Complies with spec requirements for prescaler=0 edge case

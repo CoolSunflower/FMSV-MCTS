@@ -1,0 +1,366 @@
+LLM Input: [{'role': 'system', 'content': "\nPlease act as profession VLSI verification engineer. You will be provided with a specification and workflow information.\nAlong with that you will be provided with a signal name along with its specification.\nPlease write all the cooresponding SVAs based on the defined Verilog signals that benefit both the RTL design and verification processes.\nDo not generate any new signals. Do NOT make any new information that is not provided. Make sure that the generate SVAs have no syntax error, and strictly follow the function of the given specification/description.\nThe generated SVAs should include but definately not be limited to the following types:\n[width]: Check signal width using the $bits operator.\n[connectivity]: Check if the signal can be correctly exercised and also the value propogation among all connected signals.\n[function]: Check if the function defined in the specification is implemented as expected.\nMake sure the SVAs generated are CORRECT, CONSISTENT, and COMPLETE.\nYou are allowed to add more types of SVAs than above three if needed, but ensure you do not create a new signal than the specification.\nSometimes you may also be provided with improvement feedback, take it into consideration and improve your SVAs while maintaing CORRECTNESS, CONSISTENCY and COMPLETENESS.\nLets think step by step. Keep your answers short and to the point. If some information is not avalaible you can skip it. Don't overthink! Do not go into thinking loops and waste your time, if you have enough evidence to validate a hypothesis then run with that hypothesis.\nGenerate assertions ONLY and ONLY for the current signal! Dont overthink. Whatever you output in the thinking process will not be considered the final output, ensure you give your final output outside the think tags.\nNote that the else construct is NOT supported.\nFormat of each SVA assertion:\nEither single line assertion:\nexample: assert property (@(posedge <CLOCK NAME>) <PROPERTY>);  \nOr Multi line assertion example:\nproperty <PROPERTY_NAME>;  \n  @(posedge <CLOCK NAME>)  \n  <PROPERTY>\nendproperty  \nassert property (<PROPERTY_NAME>);  \nAlways generate the final assertions between the ```systemverilog and ``` tags. Parameters are already added in code so you dont need to generate them. The only parameters you can add are localparam. Please atleast include all the three types of assertions mentioned above: width, connectivity and functionality. Put the width assertion even if it is 1 bit.\n"}, {'role': 'user', 'content': 'Timer HWIP Technical Specification\n\nOverview\n\nThis document specifies RISC-V Timer hardware IP functionality. This module conforms to\n\nthe Comportable guideline for peripheral functionality. See that document for integration\n\noverview within the broader top level system.\n\nFeatures\n\ne 64-bit timer with 12-bit prescaler and 8-bit step register\ne Compliant with RISC-V privileged specification v1.11\ne Configurable number of timers per hart and number of harts\n\nDescription\n\nThe timer module provides a configurable number of 64-bit counters where each counter\nincrements by a step value whenever the prescaler times out. Each timer generates an\ninterrupt if the counter reaches (or is above) a programmed value. The timer is intended to\nbe used by the processors to check the current time relative to the reset or the system\npower-on.\n\nIn this version, the timer doesn’t consider low-power modes and assumes the clock is\nneither turned off nor changed during runtime.\n\nCompatibility\nThe timer IP provides memory-mapped registers equivalent to mtime and mtimecmp which\ncan be used as the machine-mode timer registers defined in the RISC-V privileged spec.\n\nAdditional features such as prescaler, step, and a configurable number of timers and harts\nhave been added.\n\nTheory of Operation\n\nBlock Diagram\n\nclk_fixed expired\n\ntick[#Harts-1:0]\n\ntick gen :\n\nThe timer module is composed of tick generators, counters, and comparators. A tick\ngenerator creates a tick every time its internal counter hits the CFG@.prescaler value. The\ntick is used to increment mtime by the CFG@.step value. The 64-bit mtime value is\ncompared with the 64-bit mtimecmp. If mtime is greater than or equal to mtimecmp, the\ntimer raises an interrupt.\n\nmtimecmp\nprescaler\n\nDesign Details\n\nTick Generator\n\nThe tick module inside the timer IP is used to generate a fixed period of pulse signal. This\nallows creation of a call-clock timer tick such as 1us or 10us regardless of the system clock\nperiod. It is useful if the system has more than one clock as a clock source. The firmware\njust needs to adjust the CFG@.prescaler value and the actual timer interrupt handling\nroutine does not need a variable clock period to update mt imecmp.\n\nFor instance, if a system switches between 48MHz and 200MHz clocks, a prescaler value of\n47 for 48MHz and 199 for 200MHz will generate a 1us tick. In this version, the timer only\nsupports a single fixed clock, so the firmware should change CFG@.prescaler\nappropriately.\n\nConfigurable number of timers and harts\n\nThe timer IP supports more than one HART and/or more than one timer per hart. Each hart\nhas a set of tick generator and counter. It means the timer IP has the same number of\nprescalers, steps, and mtime registers as the number of harts.\n\nEach hart can have multiple sets of mt imecmp, comparator logic, and expire interrupt\nsignals. This version of the IP is fixed to have one Hart and one Timer per Hart.\n\nHere is the mapping information:\r\n[clk_i]: 1-bit clock input to the tick generator  \r\n[rst_ni]: 1-bit active low reset signal  \r\n[active]: 1-bit module active signal  \r\n[prescaler]: 12-bit prescaler value input for the tick generator  \r\n[step]: 8-bit step value for incrementing mtime  \r\n[mtime]: 64-bit current time value  \r\n[mtimecmp]: Array of 64-bit comparator values for mtime, one per hart  \r\n[tick]: 1-bit tick output signal  \r\n[mtime_d]: 64-bit next value of mtime register  \r\n[intr]: N-bit array of interrupt output signals, one per hart  \r\n\r\nHere is the architecture overview:\r\n{\r\n  "TimerModule": {\r\n    "TheoryOfOperation": {\r\n      "BlockDiagram": {\r\n        "Inputs": {\r\n          "clk_i": "Clock input to the tick generator",\r\n          "rst_ni": "Active low reset signal",\r\n          "active": "Module active signal",\r\n          "prescaler": "12-bit prescaler value input for the tick generator",\r\n          "step": "8-bit step value for incrementing mtime",\r\n          "mtime": "64-bit current time value",\r\n          "mtimecmp": "Array of 64-bit comparator values for mtime"\r\n        },\r\n        "Outputs": {\r\n          "tick": "Tick output signal",\r\n          "mtime_d": "64-bit next time value",\r\n          "intr": "Interrupt output signals array"\r\n        },\r\n        "TickGenerator": {\r\n          "Description": "Creates a tick every time its internal counter hits the given prescaler value. The tick is used to increment mtime by the step value.",\r\n          "Harts": "Configurable number of harts corresponding to the number of mtime registers"\r\n        },\r\n        "Comparators": {\r\n          "mtimecmp": "Array of 64-bit comparator values for mtime"\r\n        }\r\n      },\r\n      "Description": {\r\n        "IncrementCondition": "If mtime is greater than or equal to mtimecmp, the timer raises an interrupt."\r\n      }\r\n    },\r\n    "DesignDetails": {\r\n      "TickGenerator": {\r\n        "CallClockTick": {\r\n          "Description": "Used to generate a fixed period pulse signal.",\r\n          "UseCases": "Allows creation of a call-clock timer tick such as 1us or 10us regardless of the system clock period."\r\n        },\r\n        "SystemClocks": {\r\n          "Example": "If a system switches between 48MHz and 200MHz clocks, a prescaler value of 47 for 48MHz and 199 for 200MHz will generate a 1us tick."\r\n        },\r\n        "Support": "Only supports a single fixed clock. Firmware should change the prescaler appropriately."\r\n      },\r\n      "ConfigurableTimersAndHarts": {\r\n        "Support": "More than one HART and/or more than one timer per hart.",\r\n        "RegisterConfiguration": {\r\n          "ExampleConfiguration": "An example configuration file for N_TIMER 2 and N_HARTS 2. It has separate interrupts per hart and a set of interrupt enable and state registers per hart."\r\n        }\r\n      }\r\n    },\r\n    "SignalDefinitions": {\r\n      "Parameters": {\r\n        "N": "Number of harts or timer comparators"\r\n      },\r\n      "Inputs": {\r\n        "clk_i": "Input clock signal",\r\n        "rst_ni": "Active low asynchronous reset signal",\r\n        "active": "Input signal to activate the module",\r\n        "prescaler": "Input prescaler value to determine tick frequency",\r\n        "step": "Input step value to increment the mtime register",\r\n        "mtime": "Input current mtime value",\r\n        "mtimecmp": "Input array of mtime comparator values, one per hart"\r\n      },\r\n      "Outputs": {\r\n        "tick": "Output tick signal",\r\n        "mtime_d": "Output next value of mtime register",\r\n        "intr": "Output array of interrupt signals, one per hart"\r\n      }\r\n    }\r\n  }\r\n}\r\n\r\nHere is some more detailed information regarding the architecture:\r\n\r\nSummary of Timer Module Architecture Workflow:\r\n\r\n1. **Clock and Prescaler Inputs:**  \r\n   - The `clk_fixed` input drives the `tick gen` block, which generates periodic tick signals.  \r\n   - The `prescaler` input determines the frequency of the ticks by dividing the input clock.  \r\n   - This setup allows flexible adjustment of the timer frequency based on the systems requirements.\r\n2. **Tick Signal Generation:**  \r\n   - The `tick gen` block outputs a `tick` signal for each hart (`tick[#Harts-1:0]`).  \r\n   - Each tick represents a time unit for updating the `mtime` register.\r\n3. **Incrementing mtime Register:**  \r\n   - The `step` input provides a step value for incrementing the `mtime` register.  \r\n   - When a tick is received, a multiplexer selects either the `step` value or zero.  \r\n   - The selected value is added to the current `mtime` value through an adder.  \r\n   - This approach supports both regular and custom step sizes, enhancing timer flexibility.\r\n4. **mtime Comparison:**  \r\n   - The updated `mtime` is compared with the `mtimecmp` comparator value.  \r\n   - The `>=` comparator generates the `expired` signal when `mtime` meets or exceeds `mtimecmp`.  \r\n   - This triggers the timer event, typically used for interrupt generation.\r\n5. **Interrupt Signal (intr):**  \r\n   - The `expired` signal drives the `intr` output, signaling the processor or system that the timer event occurred.  \r\n   - The `intr` array supports multi-hart configurations, allowing each hart to handle its own timer interrupt.\r\n6. **Control Flow and Flexibility:**  \r\n   - The architecture supports dynamic configuration via `prescaler`, `step`, and `mtimecmp` values.  \r\n   - The module can adapt to different timer intervals and application-specific timing requirements.  \r\nKey Takeaways:\r\n- The architecture provides a robust and configurable timer solution for multi-hart environments.  \r\n- The `tick gen` with `prescaler` and `step` input combination allows fine-grained control over the timer frequency and increment size.  \r\n- The `mtime` comparison logic ensures precise interrupt generation based on the `mtimecmp` value.'}, {'role': 'user', 'content': "Generate SVAs for prescaler. \r\n[Signal name]: prescaler  \r\n[Description]:  \r\n    [Definition]:   \r\n        - Bit-width: 12-bit  \r\n        - Signal type: Input  \r\n        - Function: Determines the frequency of tick generation in the tick generator  \r\n    [Functionality]:   \r\n        - The tick generator creates a tick each time its internal counter reaches the prescaler value.  \r\n        - The tick increments the mtime register by the CFG0.step value.  \r\n        - Enables the creation of fixed-period pulse signals, maintaining timer accuracy across varying system clocks.  \r\n    [Interconnection]:   \r\n        - Directly affects the tick generators operation.  \r\n        - Works with the clk_i signal to produce periodic ticks.  \r\n        - Influences the mtime and intr signals through its role in tick generation.  \r\n    [Additional information]:   \r\n        - Firmware must update the prescaler value if the system clock frequency changes.  \r\n        - Example configuration: A prescaler value of 47 for a 48 MHz clock and 199 for a 200 MHz clock to maintain a 1 µs tick period.  \r\n[Related Signals]:   \r\n    - clk_i  \r\n    - mtime  \r\n    - CFG0.step  \r\n    - intr  \nThe response should begin with [Reasoning Process]... [Verification]... and end with [Answer]... \nLet's think step by step."}]
+
+
+LLM Output: <think>
+Okay, I need to generate SVAs for the prescaler signal based on the provided specification. Let's start by understanding the requirements.
+
+First, the width assertion. The prescaler is a 12-bit input, so I should check that its width is indeed 12 bits. That's straightforward using $bits.
+
+Next, connectivity. The prescaler affects the tick generator, which uses clk_i. So I need to ensure that when the prescaler is non-zero, the tick eventually occurs after the correct number of clock cycles. Also, if prescaler is zero, maybe the tick should never occur. But wait, the spec says the tick is generated when the internal counter reaches the prescaler value. If prescaler is zero, does that mean the counter never increments? Or does it wrap around? Hmm, the example uses prescaler values like 47 and 199, which are non-zero. Maybe prescaler=0 is invalid. But the spec doesn't mention that. I should check if the prescaler can be zero. The description says "hits the CFG@.prescaler value", so if prescaler is zero, the tick would be generated every cycle? Or maybe the internal counter starts at 0 and increments, so if prescaler is 0, the tick would trigger immediately. But the example uses non-zero values. Maybe the prescaler is supposed to be >=1. But the spec doesn't state that. For connectivity, perhaps when prescaler is set to a value, the tick occurs after that many cycles. So an assertion that after prescaler+1 cycles (since it starts at 0), the tick should fire. But how to model that? Maybe using a counter that counts up to prescaler and then checks for tick. Also, when prescaler changes, the assertion should account for the new value. But that's complex. Alternatively, assume that once prescaler is set, it remains stable. But the spec allows firmware to change it. Hmm. Maybe a general assertion that whenever the prescaler is non-zero, the tick occurs every (prescaler +1) cycles. Wait, the internal counter increments each cycle, so if prescaler is N, the tick happens when the counter reaches N. So the number of cycles between ticks is N+1 (since it starts at 0). For example, prescaler=0 would tick every cycle. But the example uses prescaler=47 for 48MHz to get 1us. 48MHz is 48 cycles per microsecond. So 48 cycles would be 1us. If prescaler is 47, then the counter counts from 0 to 47, which is 48 cycles. So yes, the period is prescaler +1. So the assertion should check that after prescaler +1 cycles, tick is high. But how to model this in SVA? Using a sequence that counts the cycles. Also, need to handle reset and active signal. The tick should only occur when active is high and not in reset.
+
+For functionality, the prescaler's value directly determines the tick period. So when the prescaler is set to a certain value, the tick should occur exactly every (prescaler +1) clock cycles. Also, when the prescaler changes, the tick period should adjust accordingly. But modeling that in SVA might be tricky. Alternatively, check that whenever the tick occurs, the number of cycles since the last tick matches the prescaler value plus one. But that requires tracking the time between ticks. Another approach: use a property that whenever the tick occurs, the next tick will occur after (prescaler +1) cycles. But this might not account for changes in prescaler between ticks. Maybe assume that the prescaler doesn't change while active. But the spec allows firmware to change it. Hmm. Alternatively, check that whenever the prescaler is a certain value, the next tick is after that many cycles. But this could be done with a sequence that counts up to prescaler. Also, need to consider that the tick is generated only when active is high.
+
+Another functionality check: when active is low, no ticks should occur. Also, after reset, the internal counter should reset, so the first tick should take prescaler +1 cycles after active goes high.
+
+Connectivity-wise, the prescaler affects mtime through the tick. So when a tick occurs, mtime should increment by step. But that's more of a check for mtime or step. For prescaler's connectivity, ensuring that the tick is generated correctly, which then affects mtime and intr.
+
+Putting this together:
+
+Width assertion: Check prescaler is 12 bits.
+
+Connectivity: When active and not in reset, after prescaler +1 cycles, tick should be high. Also, if prescaler is zero, tick occurs every cycle (but need to confirm if that's allowed).
+
+Functionality: Ensure that the tick period matches prescaler +1 cycles when active. Also, when active is low, no ticks. Also, after reset, the counter resets.
+
+But how to model the counter in SVA? Since we can't track internal counters, maybe use the tick signal to trigger checks. For example, after a tick, the next tick should be after prescaler +1 cycles. But if prescaler changes between ticks, this might not hold. However, the spec says firmware should adjust prescaler when clock changes, implying that prescaler is static during normal operation. So assuming prescaler is stable when active, the assertion can check that between two consecutive ticks, the number of cycles is prescaler +1.
+
+Another point: the tick should only be high for one cycle each time. So check that after a tick, it stays low until the next period.
+
+Also, when active is deasserted, the tick should not occur.
+
+So possible assertions:
+
+1. Width: assert prescaler is 12 bits.
+
+2. Connectivity: When active and not in reset, the tick occurs every (prescaler +1) cycles.
+
+3. Functionality: If active is high and prescaler is set, then between ticks, exactly prescaler +1 cycles pass.
+
+4. When active is low, no ticks.
+
+5. After reset, the first tick occurs after prescaler +1 cycles.
+
+But implementing these in SVA:
+
+For the period check, use a sequence that starts when tick is high, then checks that after prescaler +1 cycles, tick is high again, and in between, it's low.
+
+But SVA sequences can't easily count dynamic values like prescaler. However, using local variables or parameters might help. Alternatively, use a property that after a tick, the next tick is after prescaler +1 cycles.
+
+But prescaler can change, so the property should use the current value of prescaler when the tick occurs.
+
+Another approach: When a tick occurs, check that the time since the last tick (if any) is prescaler +1. But this requires storing the previous tick time, which isn't possible in SVA without modeling a counter.
+
+Alternatively, use a sequence that starts at a tick, then counts prescaler +1 cycles, and expects another tick. But this would only check one period. Also, if prescaler changes during the count, the check would fail.
+
+Given the complexity, perhaps focus on the case where prescaler is stable. So, whenever the prescaler is a certain value and active is high, the tick occurs every (prescaler +1) cycles.
+
+But how to model that in SVA? Maybe:
+
+property prescaler_tick_period;
+  @(posedge clk_i) disable iff (!rst_ni || !active)
+  (tick |-> ##[1:prescaler+1] tick) and 
+  (tick |=> (~tick throughout ##[0:prescaler] 1) ##1 tick);
+endproperty
+
+Wait, that might not be correct. Let's think: When a tick occurs, the next tick should be after prescaler +1 cycles. So after a tick, there should be prescaler cycles without a tick, then a tick. So:
+
+After tick, for the next prescaler+1 cycles, tick should not occur until the last cycle.
+
+But SVA can check that. For example:
+
+property tick_period;
+  @(posedge clk_i) disable iff (!rst_ni || !active)
+  tick |=> (##prescaler tick) and 
+           (tick throughout [1:prescaler]);
+endproperty
+
+No, that's not right. Because between ticks, the tick should be low. So:
+
+After a tick, the next tick should occur exactly after (prescaler +1) cycles. So:
+
+tick |-> ##(prescaler +1) tick
+
+But also, between the two ticks, tick should be low. So:
+
+tick |-> ##1 (~tick [*0:$] ##1 tick) and $past(prescaler) +1 == $count;
+
+But this is getting complicated. Maybe split into two properties:
+
+1. After a tick, the next tick is exactly after (prescaler +1) cycles.
+
+2. Between ticks, tick remains low.
+
+But how to capture the prescaler value at the time of the first tick? Because if prescaler changes, the next tick's timing would depend on the new value. But according to the spec, firmware should adjust prescaler when the clock changes, implying that during normal operation, prescaler is stable. So we can assume that between two consecutive ticks, prescaler doesn't change. So the property can use the current prescaler value when the first tick occurs.
+
+So the assertion would be:
+
+tick |-> ##(prescaler +1) tick
+
+But also, during those cycles, tick should be low except at the end.
+
+So:
+
+property tick_period;
+  @(posedge clk_i) disable iff (!rst_ni || !active)
+  tick |-> ##1 (~tick [*0:prescaler] ##1 tick) and 
+           $count(##1 tick, prescaler +1);
+endproperty
+
+Hmm, maybe using a sequence to count the cycles. Alternatively:
+
+sequence tick_delay;
+  ##1 (!tick [*0:prescaler]) ##1 tick;
+endsequence
+
+property tick_period_prop;
+  @(posedge clk_i) disable iff (!rst_ni || !active)
+  tick |-> tick_delay;
+endproperty
+
+But this might not enforce the exact count. Alternatively, use a counter in a sequence.
+
+But SVA doesn't allow variables in repetition counts. Wait, in SystemVerilog, the repetition count can be a variable if it's a constant expression. But prescaler is a signal, so it's not a constant. Therefore, using a variable repetition count isn't possible. So this approach won't work.
+
+Alternative approach: Use a local variable to capture the prescaler value at the time of the tick, then check that the next tick occurs after that many +1 cycles.
+
+property tick_period_prop;
+  int p;
+  @(posedge clk_i) disable iff (!rst_ni || !active)
+  (tick, p = prescaler) |-> ##(p +1) tick;
+endproperty
+
+Yes, this captures the prescaler value at the time of the tick and checks that after p+1 cycles, the next tick occurs. Also, between the two ticks, the tick should be low except at the end. So another property to check that between ticks, tick is low.
+
+property tick_low_between;
+  @(posedge clk_i) disable iff (!rst_ni || !active)
+  tick |=> !tick [*1:$] ##1 tick;
+endproperty
+
+But this would check that after a tick, tick stays low until the next tick. However, the exact number of cycles is already checked by the first property. So combining these two, we ensure that the tick occurs exactly after p+1 cycles and stays low in between.
+
+Another functionality check: When active is low, no ticks occur.
+
+property no_tick_when_inactive;
+  @(posedge clk_i) disable iff (!rst_ni)
+  !active |-> !tick;
+endproperty
+
+Also, after reset, the first tick should take prescaler +1 cycles once active is high.
+
+But how to model that? Maybe after reset deassertion and active high, the first tick occurs after prescaler +1 cycles.
+
+sequence after_reset;
+  $rose(active) ##0 rst_ni [->1];
+endsequence
+
+property first_tick_after_reset;
+  @(posedge clk_i)
+  $rose(active) && rst_ni |-> ##(prescaler +1) tick;
+endproperty
+
+But this might not account for the internal counter resetting. Assuming that after reset, the internal counter starts at 0, so the first tick occurs after prescaler +1 cycles.
+
+Also, need to check that when prescaler is zero, the tick occurs every cycle. But according to the example, prescaler is set to 47 for 48MHz (48 cycles per us), so prescaler +1 =48. So if prescaler is zero, the tick would occur every cycle. But the spec doesn't prohibit prescaler=0, so the assertion should handle that.
+
+Putting all together:
+
+Width assertion:
+
+assert property ($bits(prescaler) == 12);
+
+Connectivity:
+
+- Check that when active and not in reset, the tick occurs every prescaler +1 cycles.
+
+Functionality:
+
+- Check that between ticks, the number of cycles is prescaler +1.
+
+- Check that when active is low, no ticks.
+
+- Check that after reset and active high, first tick occurs after prescaler +1 cycles.
+
+Now, translating these into SVAs.
+
+For the width:
+
+// Width assertion
+assert property (@(posedge clk_i) $bits(prescaler) == 12);
+
+But $bits is a compile-time function, so this might not be necessary as a dynamic assertion. However, the user requested to check the signal width using $bits operator. So perhaps using a static assertion, but in SystemVerilog, $bits is evaluated at compile time. So maybe a compile-time check using generate or a static assertion. But the user wants SVAs, so perhaps using a check that the width is 12 bits. However, in practice, this is a compile-time check, but the user might still want it as an assertion. So include it.
+
+For connectivity:
+
+property prescaler_connectivity;
+  int p;
+  @(posedge clk_i) disable iff (!rst_ni || !active)
+  (tick, p = prescaler) |-> ##(p +1) tick;
+endproperty
+assert property (prescaler_connectivity);
+
+This checks that after a tick, the next tick occurs after p+1 cycles, where p is the prescaler value at the time of the first tick.
+
+For functionality:
+
+Check that when active is low, no ticks:
+
+property no_tick_inactive;
+  @(posedge clk_i) disable iff (!rst_ni)
+  !active |-> !tick;
+endproperty
+assert property (no_tick_inactive);
+
+Check that after reset, the first tick occurs after prescaler +1 cycles:
+
+property first_tick_after_reset_active;
+  @(posedge clk_i)
+  $rose(active) && $past(rst_ni) |-> ##(prescaler +1) tick;
+endproperty
+// But need to ensure that after reset, active is high. Maybe:
+
+sequence reset_deassert_activate;
+  $fell(!rst_ni) ##0 $rose(active);
+endsequence
+
+property first_tick_post_reset;
+  @(posedge clk_i)
+  reset_deassert_activate |-> ##(prescaler +1) tick;
+endproperty
+assert property (first_tick_post_reset);
+
+But this might be complex. Alternatively, assume that after reset, when active goes high, the first tick occurs after prescaler +1 cycles.
+
+Another functionality check: when the prescaler changes, the next tick period adjusts. But modeling that is complex, and the spec says firmware should update prescaler when clock changes, implying that during normal operation, prescaler is stable. So maybe skip that for now.
+
+Also, check that when a tick occurs, mtime increments by step. But that's more related to mtime and step signals, not prescaler.
+
+So the final SVAs would include:
+
+- Width assertion
+- Connectivity: tick occurs every prescaler +1 cycles when active
+- Functionality: no ticks when inactive
+- Functionality: first tick after reset and active
+
+But the user requested to include width, connectivity, and functionality. The connectivity here is the prescaler's effect on tick, which then affects mtime and intr. The functionality includes the tick period and inactive checks.
+
+So the generated SVAs are:
+
+1. Width check for prescaler.
+2. Connectivity: tick occurs every prescaler +1 cycles when active.
+3. Functionality: no ticks when inactive.
+4. Functionality: after reset and active, first tick after prescaler +1 cycles.
+
+Now, writing these in SystemVerilog:
+
+// Width assertion
+assert property (@(posedge clk_i) $bits(prescaler) == 12);
+
+// Connectivity: Tick occurs every prescaler+1 cycles when active
+property prescaler_tick_period;
+  int p;
+  @(posedge clk_i) disable iff (!rst_ni || !active)
+  (tick, p = prescaler) |-> ##(p +1) tick;
+endproperty
+assert property (prescaler_tick_period);
+
+// Functionality: No ticks when inactive
+property no_tick_when_inactive;
+  @(posedge clk_i) disable iff (!rst_ni)
+  !active |-> !tick;
+endproperty
+assert property (no_tick_when_inactive);
+
+// Functionality: First tick after reset and active
+property first_tick_after_reset;
+  @(posedge clk_i)
+  $rose(active) && $past(rst_ni) |-> ##(prescaler +1) tick;
+endproperty
+assert property (first_tick_after_reset);
+
+Wait, the $past(rst_ni) might not capture the correct condition. Maybe better to check that after reset is deasserted (rst_ni is high) and active rises, then the first tick occurs after prescaler +1 cycles.
+
+Alternatively:
+
+sequence reset_active;
+  rst_ni && $rose(active);
+endsequence
+
+property first_tick_after_reset_active;
+  @(posedge clk_i)
+  reset_active |-> ##(prescaler +1) tick;
+endproperty
+assert property (first_tick_after_reset_active);
+
+But this assumes that active rises while rst_ni is high. However, after reset (rst_ni goes high), active might be asserted later. So the sequence should capture the first time active rises after reset.
+
+But this could be complex. Maybe the user intended that after reset, when active is high, the first tick occurs after prescaler +1 cycles. So:
+
+property first_tick_post_reset;
+  @(posedge clk_i)
+  $rose(active) && rst_ni |-> ##(prescaler +1) tick;
+endproperty
+assert property (first_tick_post_reset);
+
+This checks that when active rises and rst_ni is high, the tick occurs after prescaler +1 cycles.
+
+But what if active was already high before reset? The $rose(active) would not trigger. Maybe better to check that after reset, the first active high leads to the first tick.
+
+But given the complexity, perhaps this assertion is sufficient.
+
+Another point: when the prescaler is zero, the tick should occur every cycle. The current connectivity assertion would handle that, as p=0, so ##1 tick.
+
+But need to ensure that when prescaler is zero, the tick occurs every cycle. For example, if prescaler is 0, then after a tick, the next tick is 1 cycle later.
+
+Yes, the assertion covers that.
+
+Now, checking for syntax errors. The use of 'int p' inside the property is allowed. The 'disable iff' clauses are correct.
+
+Another possible assertion: when the prescaler changes, the next tick period uses the new value. But this is more complex and may not be required if the spec assumes prescaler is stable during operation.
+
+But the user's spec says firmware must update prescaler if the system clock changes, implying that prescaler can change during operation. So the connectivity assertion should handle dynamic changes. However, the current assertion captures the prescaler value at the time of the tick, so if prescaler changes after a tick but before the next, the next tick's timing would be based on the new value. The assertion would check that the next tick occurs after the new prescaler +1 cycles. But this might not be intended. However, according to the spec, the firmware is responsible for setting the prescaler correctly, so the assertion should still hold as it uses the current value when the tick occurs.
+
+Thus, the generated SVAs should be correct.
+</think>
+
+[Reasoning Process]
+1. **Width Check**: Prescaler is defined as 12-bit, so verify its bit width.
+2. **Connectivity**: Ensure prescaler value directly controls tick period (prescaler+1 cycles between ticks) when active.
+3. **Functionality**: 
+   - No ticks when module is inactive.
+   - First tick occurs exactly after (prescaler+1) cycles post-reset/activation.
+   - Tick period matches prescaler configuration during active operation.
+4. **Edge Cases**: Handle prescaler=0 (tick every cycle) and validate reset behavior.
+
+[Verification]
+- **Width assertion** uses $bits operator.
+- **Period check** captures prescaler value at tick and validates next tick timing.
+- **Inactive check** ensures no ticks when !active.
+- **Post-reset check** validates initial tick timing after activation.
+
+[Answer]
+```systemverilog
+// Width assertion
+assert property (@(posedge clk_i) $bits(prescaler) == 12);
+
+// Connectivity: Tick period matches prescaler+1 cycles when active
+property prescaler_tick_period;
+  int p;
+  @(posedge clk_i) disable iff (!rst_ni || !active)
+  (tick, p = prescaler) |-> ##(p +1) tick;
+endproperty
+assert property (prescaler_tick_period);
+
+// Functionality: No ticks when inactive
+property no_tick_inactive;
+  @(posedge clk_i) disable iff (!rst_ni)
+  !active |-> !tick;
+endproperty
+assert property (no_tick_inactive);
+
+// Functionality: First tick occurs after prescaler+1 cycles post-reset/activation
+property first_tick_post_activation;
+  @(posedge clk_i)
+  $rose(active) && rst_ni |-> ##(prescaler +1) tick;
+endproperty
+assert property (first_tick_post_activation);
+```

@@ -1,0 +1,36 @@
+<think>
+Okay, let's tackle this problem. The user wants me to extract all unique and valid SystemVerilog assertions for the signal "step" from the provided list, ensuring maximum retention and including width checks if missing.
+
+First, I need to look at the given assertions. The list has three assertions. Let me go through each one:
+
+1. **First assertion**: `assert property (@(posedge clk_i) ($bits(step) == 8));`  
+   This checks that the width of the `step` signal is 8 bits. Since the documentation mentions an 8-bit step register, this assertion is valid and necessary. Must keep this.
+
+2. **Second assertion**: It's a property named `step_connectivity`. The property states that when `active` and `tick` are true, `mtime_d` should equal `mtime + step`. This checks if the step value is correctly added to `mtime` when active. This is a valid connectivity check for `step`. Keep it.
+
+3. **Third assertion**: `step_functionality_inactive` property. Checks that when `active` is low, `mtime_d` remains equal to `mtime`. This ensures that `step` isn't applied when inactive. Though it's more about `active` signal's effect, it indirectly involves `step` by checking that without `active`, the step doesn't increment. However, the assertion itself doesn't directly check `step` but the functionality of the module when inactive. But since it's part of the provided list and relates to `step`'s impact, maybe include it as valid.
+
+Next, check for uniqueness. All three properties are different. The first is a width check, the second and third are functionality checks under active/inactive conditions. No duplicates here.
+
+Now, ensure the width assertion is present. The first assertion is exactly that, so it's included. The user emphasized adding a width check if missing, but it's already here.
+
+Are there any other possible assertions for `step` not listed here? The user provided three, and we need to extract all valid ones. Since the user wants to maximize retained assertions without modification, even if an assertion isn't directly about `step` but involves it, we should include it. However, all the given ones mention `step` in their logic.
+
+So, all three assertions are valid and unique. The answer should list all three as they are, ensuring no modifications. The width check is already covered by the first assertion. So, the final answer includes all three.
+</think>
+
+```systemverilog
+assert property (@(posedge clk_i) ($bits(step) == 8));
+
+property step_connectivity;
+  @(posedge clk_i) disable iff (!rst_ni)
+  (active && tick) |-> (mtime_d == (mtime + step));
+endproperty
+assert property (step_connectivity);
+
+property step_functionality_inactive;
+  @(posedge clk_i) disable iff (!rst_ni)
+  (!active) |-> (mtime_d == mtime);
+endproperty
+assert property (step_functionality_inactive);
+```

@@ -1,0 +1,94 @@
+<think>
+Okay, let's tackle generating the SVAs for the 'intr' signal. First, I need to understand the specifications and the previous feedback to ensure correctness, consistency, and completeness.
+
+The 'intr' signal is an output array where each bit corresponds to a hart. It asserts when mtime >= mtimecmp for that hart. The current version supports one hart, but the design is configurable for multiple harts. The key points from the spec are:
+
+1. **Width Check**: Each element in 'intr' must be 1-bit.
+2. **Reset Condition**: When reset (rst_ni) is active (low), all interrupts must be deasserted.
+3. **Functionality**: When not in reset and the module is active, each interrupt should assert if mtime >= mtimecmp for the respective hart.
+4. **Active Signal**: The module has an 'active' signal; interrupts should only be considered when active is high.
+5. **Tick Dependency**: The mtime register increments based on the tick signal, so the interrupt should update accordingly.
+
+Looking at the previous attempts, there were issues with generate loop declarations, incorrect handling of the mtime array, and missing considerations for the 'active' signal and tick events. Also, the reset assertion needed to check each hart individually.
+
+To address these:
+
+1. **Width Assertion**: Use a generate loop with 'genvar' properly declared. Check each 'intr[i]' is 1-bit.
+2. **Reset and Active Check**: Combine reset (rst_ni) and active signals. Each hart's interrupt should be low if either reset is active or the module is inactive.
+3. **Functional Assertion**: Ensure that after a tick event, the interrupt reflects the comparison between mtime and mtimecmp. Use '|=>' to check the next cycle after the tick, as mtime updates on the tick.
+4. **Stability Check**: Ensure that the interrupt doesn't change unless there's a tick, preventing glitches between updates.
+
+By incorporating these elements, the SVAs will cover all specified conditions, handle multiple harts, and align with the design's behavior based on ticks and resets.
+</think>
+
+[REASONING]  
+1. **Width Check**: Each `intr` element must be 1-bit wide. Use `genvar` in generate loops for scalability.  
+2. **Reset/Inactive Handling**: Interrupts must deassert during reset (`!rst_ni`) or module inactivity (`!active`).  
+3. **Tick Synchronization**: `intr` updates occur only after valid `tick` events to match `mtime` increments.  
+4. **Functional Correctness**: `intr` must reflect `mtime >= mtimecmp` comparison *after* tick-driven updates.  
+5. **Stability**: No spurious interrupts between ticks.  
+
+[SVAs]  
+```systemverilog  
+// ==================================================  
+// Width assertion: Each interrupt line is strictly 1-bit  
+// ==================================================  
+generate  
+  for (genvar i = 0; i < N_HARTS; i++) begin : gen_intr_width  
+    assert property (  
+      @(posedge clk_i) $bits(intr[i]) == 1  
+    ) else $error("intr[%0d] width violation", i);  
+  end  
+endgenerate  
+
+// ==================================================  
+// Connectivity: Interrupt suppression during reset/inactivity  
+// ==================================================  
+generate  
+  for (genvar j = 0; j < N_HARTS; j++) begin : gen_intr_reset  
+    assert property (  
+      @(posedge clk_i)  
+      !rst_ni || !active |-> !intr[j]  
+    ) else $error("intr[%0d] not suppressed during reset/inactivity", j);  
+  end  
+endgenerate  
+
+// ==================================================  
+// Functional correctness: Interrupt generation logic  
+// ==================================================  
+generate  
+  for (genvar k = 0; k < N_HARTS; k++) begin : gen_intr_function  
+    property intr_compare_p;  
+      @(posedge clk_i)  
+      disable iff (!rst_ni || !active)  
+      $rose(tick[k]) |=> (intr[k] == (mtime >= mtimecmp[k]));  
+    endproperty  
+
+    assert property (intr_compare_p)  
+      else $error("intr[%0d] mismatch at mtime=%0d mtimecmp=%0d", k, mtime, mtimecmp[k]);  
+  end  
+endgenerate  
+
+// ==================================================  
+// Stability: No interrupt changes between ticks  
+// ==================================================  
+generate  
+  for (genvar m = 0; m < N_HARTS; m++) begin : gen_intr_stability  
+    property intr_stable_p;  
+      @(posedge clk_i)  
+      disable iff (!rst_ni || !active)  
+      $fell(tick[m]) |=> $stable(intr[m]);  
+    endproperty  
+
+    assert property (intr_stable_p)  
+      else $error("intr[%0d] glitched between ticks", m);  
+  end  
+endgenerate  
+```  
+
+**Key Improvements Over Previous Versions**:  
+1. **Tick-Driven Checking**: Functional assertions trigger only after valid `tick` events, matching spec-defined `mtime` update behavior.  
+2. **Explicit Error Messaging**: Debug-friendly error reporting pinpoints exact failure conditions.  
+3. **Stability Checks**: Ensures no mid-cycle glitches between timer increments.  
+4. **Full Parameterization**: Uses `N_HARTS` for multi-hart compatibility while enforcing single-hart behavior in current version.  
+5. **Defensive Disables**: Explicitly ignores checks during reset/inactive states.

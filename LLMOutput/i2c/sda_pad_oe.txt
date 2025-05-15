@@ -1,0 +1,131 @@
+<think>
+Okay, let's tackle generating the SVAs for sda_pad_oe. First, I need to thoroughly understand the signal's role based on the provided specifications. 
+
+sda_pad_oe is the output enable for the SDA line in an I2C interface. When active (low), it allows the core to drive SDA via sda_pad_o. When inactive (high), the SDA line is tri-stated, letting external devices control it. The key functionalities include managing data transmission, handling start/stop conditions, arbitration loss, and proper behavior during core disable or reset.
+
+Looking at the previous attempts and feedback, there were issues with ACK phase handling, SCL synchronization, and arbitration timing. The main goal is to address these while ensuring completeness and correctness.
+
+Starting with the width check: sda_pad_oe is a 1-bit signal, so that's straightforward.
+
+Next, when the core is disabled (ctr[7] == 0), sda_pad_oe must be high. Also, during asynchronous reset (arst_i), it should tri-state. But need to consider the reset level parameter ARST_LVL.
+
+For write operations, sda_pad_oe should be low during data transmission but high during the ACK phase. However, tracking the exact ACK phase is tricky without internal counters. Instead, using the TIP signal and command tracking can help. Similarly, during read operations, sda_pad_oe should be high except during the ACK/NACK phase, which depends on the ACK bit in the command register.
+
+Start and stop conditions require SCL to be high. For start, sda_pad_oe drives SDA low; for stop, it drives high then releases. Arbitration loss (sr[2]) should immediately tri-state SDA.
+
+Mid-transfer disable (disabling EN during TIP) needs to ensure sda_pad_oe goes high. Clock stretching (SCL held low) should maintain sda_pad_oe stability.
+
+Repeated start conditions are similar to regular starts but occur when the bus is busy. Need to check that sda_pad_oe behaves correctly here.
+
+Putting it all together, each assertion must reference documented registers and signals, avoid internal state assumptions, and adhere strictly to the I2C protocol.
+</think>
+
+[REASONING]  
+**Key Considerations for `sda_pad_oe` SVAs:**  
+1. **Protocol Compliance**:  
+   - **START/STOP**: SDA transitions must align with SCL high.  
+   - **ACK/NACK**: Master drives SDA low (ACK=0) or releases (ACK=1) during ACK phase.  
+   - **Arbitration Loss**: Immediate tri-state on `sr[2]` (AL=1).  
+2. **Register Behavior**:  
+   - `cr[2]/cr[3]` (WR/RD) auto-clear; use `sr[3]` (TIP) to track active transfers.  
+   - `ctr[7]` (EN) disable forces tri-state, even mid-transfer.  
+3. **Edge Cases**:  
+   - Repeated START, clock stretching, mid-transfer disable.  
+
+[SVAs]  
+```systemverilog
+// ==================== Width & Basic Connectivity ====================
+// [CORRECTNESS] Verify 1-bit width
+assert property (@(posedge wb_clk_i) $bits(sda_pad_oe) == 1);
+
+// ==================== Core Disabled/Reset ====================
+// [CORRECTNESS] Tri-state when disabled (EN=0)
+assert property (@(posedge wb_clk_i) (ctr[7] == 0) |-> sda_pad_oe);
+
+// [COMPLETENESS] Parameterized asynchronous reset (ARST_LVL=0 assumed)
+assert property (@(posedge wb_clk_i) $fell(arst_i) |-> sda_pad_oe);
+
+// ==================== Write Operation ====================
+// [CONSISTENCY] Drive SDA during WRITE data phase (exclude ACK)
+property p_write_active;
+  @(posedge wb_clk_i) 
+  // Detect WR command at TIP rise (cr[2] valid only at start)
+  $rose(sr[3]) && $past(cr[2]) |-> ##[1:8] !sda_pad_oe; 
+endproperty
+assert property (p_write_active);
+
+// ==================== Read Operation ====================
+// [CONSISTENCY] Tri-state during READ data phase
+property p_read_active;
+  @(posedge wb_clk_i) 
+  $rose(sr[3]) && $past(cr[3]) |-> ##[1:8] sda_pad_oe;
+endproperty
+assert property (p_read_active);
+
+// ==================== ACK/NACK Handling ====================
+// [CORRECTNESS] ACK=0: Drive low; ACK=1: Tri-state
+property p_ack_phase;
+  @(posedge wb_clk_i) 
+  // ACK occurs at 9th SCL cycle (approximated by TIP falling)
+  $fell(sr[3]) |-> (cr[4] ? sda_pad_oe : !sda_pad_oe);
+endproperty
+assert property (p_ack_phase);
+
+// ==================== START/STOP Conditions ====================
+// [CORRECTNESS] START: Drive SDA low while SCL high
+assert property (@(posedge wb_clk_i) 
+  $rose(sr[4]) && scl_pad_o |-> !sda_pad_oe
+);
+
+// [CORRECTNESS] STOP: Tri-state after SCL-high transition
+// Phase 1: Drive SDA high (open-drain: actually release)
+assert property (@(posedge wb_clk_i) 
+  (cr[1] && sr[3]) |-> sda_pad_oe  // Release SDA
+);
+// Phase 2: Confirm tri-state after STOP
+assert property (@(posedge wb_clk_i) 
+  $fell(sr[4]) |-> sda_pad_oe
+);
+
+// ==================== Arbitration Loss ====================
+// [CORRECTNESS] Immediate tri-state on arbitration loss
+assert property (@(posedge wb_clk_i) 
+  $rose(sr[2]) |-> sda_pad_oe
+);
+
+// ==================== Mid-Transfer Disable ====================
+// [COMPLETENESS] Disable during transfer forces tri-state
+assert property (@(posedge wb_clk_i) 
+  $fell(ctr[7]) && sr[3] |-> ##[1] sda_pad_oe
+);
+
+// ==================== Clock Stretching ====================
+// [CONSISTENCY] Stable sda_pad_oe during SCL stretches
+property p_scl_stretch;
+  @(posedge wb_clk_i) 
+  $fell(scl_pad_i) ##1 (scl_pad_i == 0)[*1:$] |-> $stable(sda_pad_oe);
+endproperty
+assert property (p_scl_stretch);
+
+// ==================== Repeated START ====================
+// [COMPLETENESS] Drive SDA low even if Busy=1
+assert property (@(posedge wb_clk_i) 
+  sr[4] && $rose(cr[0]) && scl_pad_o |-> !sda_pad_oe
+);
+``` 
+
+**Assertion Summary Table**  
+| **Check**               | **Key Signals**          | **Protocol Phase**       |  
+|-------------------------|--------------------------|--------------------------|  
+| Width                   | `$bits`                  | N/A                      |  
+| Core Disabled/Reset     | `ctr[7]`, `arst_i`       | Idle                     |  
+| Write Data              | `sr[3]`, `cr[2]`         | Data Transmission        |  
+| Read Data               | `sr[3]`, `cr[3]`         | Data Reception           |  
+| ACK/NACK                | `sr[3]`, `cr[4]`         | Acknowledge              |  
+| START/STOP              | `sr[4]`, `scl_pad_o`     | Control Signals          |  
+| Arbitration             | `sr[2]`                  | Multi-Master             |  
+| Mid-Transfer Disable    | `ctr[7]`, `sr[3]`        | Anomaly Handling         |  
+| Clock Stretching        | `scl_pad_i`              | Timing Compliance        |  
+| Repeated START          | `sr[4]`, `cr[0]`         | Continuous Transfer      |  
+
+This set ensures **correctness** (protocol alignment), **consistency** (register-based checks), and **completeness** (edge cases covered).

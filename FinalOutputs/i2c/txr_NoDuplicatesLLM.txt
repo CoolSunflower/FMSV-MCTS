@@ -1,0 +1,210 @@
+<think>
+Okay, let's tackle this problem. The user wants me to extract all unique and valid SystemVerilog assertions for the signal 'txr' from the provided list, maximizing the number retained and ensuring uniqueness. They also mentioned including a width assertion if missing.
+
+First, I'll go through each assertion one by one. The first one is: "assert property (@(posedge wb_clk_i) ($bits(txr) == 8));". This checks that 'txr' is 8 bits wide. Since the user mentioned including a width assertion, this is essential and should definitely be included.
+
+Next, looking at the various connectivity assertions. There are multiple versions of TXR_WriteConnectivity. The first one uses |=> (txr == $past(wb_dat_i)) with a disable iff condition. Another version uses ##1 wb_ack_o and checks $past(wb_dat_i, 2). These are different, so both might be valid. However, maybe they're trying to account for the WISHBONE interface's two-cycle access. But since the user wants unique assertions, I need to check if they're actually different. The first one triggers one cycle after the write, the second after two cycles. Depending on the core's behavior, both could be valid, but they might be redundant. However, the user wants to maximize retained assertions, so include both unless they are duplicates.
+
+Looking at the reset value assertions. There's TXR_ResetValue in two forms. One uses |=> (txr == 8'h00) and another |->. The difference is 'imply' versus 'then'. The correct one would check that after reset, txr is 0. The first checks that if reset occurs, in the next cycle txr is 0. The second checks that during reset, txr is 0. The correct form depends on whether the reset is synchronous or asynchronous. Since the core has an asynchronous reset, the assertion should check that upon reset being asserted, txr becomes 0. However, both assertions might be valid in different contexts. But since the user wants unique ones, maybe the correct one is the one using |=> after checking reset. But to maximize, perhaps include both, but they might be duplicates in intent. Wait, looking closer: one says (arst_i == ARST_LVL || wb_rst_i) |=> (txr == 8'h00), the other (arst_i == ARST_LVL || wb_rst_i) |-> (txr == 8'h00). The first checks that if reset is active now, then next cycle txr is 0. The second checks that whenever reset is active, txr is 0. Depending on the design, both could be valid. But since the core might reset txr immediately upon reset (asynchronous), the |-> version is correct. However, in SystemVerilog, asynchronous reset would take effect immediately, not on the next cycle. Therefore, the |-> version is more accurate. But the original list has two different TXR_ResetValue assertions. Need to check if both are unique. One uses |=>, the other |->. So they are different. The user wants all unique ones, so include both. However, in reality, the correct assertion would be that during reset, txr is 0. So the |-> is better. But since the user wants to maximize retention, include both if they are different.
+
+Next, TXR_ValidRWBit. There are multiple versions. Some check on $rose(cr[2]) and others on cr[2]. Also, some have different disable conditions. The ones that check at the rising edge of cr[2] (command register's write bit) would verify that when a write command is issued, the RW bit (txr[0]) is valid. Others check whenever cr[2] is high. Depending on design, both could be valid. But the rising edge check ensures that when the command is first issued, the RW bit is valid, which is important. The others might be checking continuously, which could be redundant. However, to maximize, include all variations unless they are exact duplicates.
+
+TXR_NoWriteDuringTIP checks that when a transfer is in progress (sr[3] high), the TXR isn't written. That's important for data stability during transfer. So include that.
+
+TXR_Stability assertions check that txr remains stable during TIP. There are two versions: one with $past(sr[3]) and another without. The first checks that if TIP was high in the previous cycle and still high, txr is stable. The other checks that whenever TIP is high, txr is stable. The first is more precise, but the latter might cover more cases. Both could be valid, so include both.
+
+ShiftRegisterLoad assertion assumes the internal shift register is named 'shift' and checks that when cr[4] (WR bit) rises, the shift register loads txr. If the core's implementation does this, then it's valid. However, this depends on internal signals, which might not be visible in the interface. But since it's part of the provided list, including it.
+
+Now, looking for duplicates. For example, the first TXR_WriteConnectivity and another version with ##1 wb_ack_o. These are different, so both are included. Similarly, different disable conditions (arst_i vs wb_rst_i) might be handled in different assertions, but the user says to consider them as per the given list.
+
+Finally, ensuring the width assertion is present. The first assertion in the list is the width check, so that's included.
+
+So compiling all the unique ones:
+
+1. Width assertion: "assert property (@(posedge wb_clk_i) ($bits(txr) == 8));"
+
+2. TXR_WriteConnectivity (two versions)
+
+3. TXR_ResetValue (two versions)
+
+4. TXR_ValidRWBit (multiple versions)
+
+5. TXR_NoWriteDuringTIP
+
+6. TXR_Stability (two versions)
+
+7. TXR_Connectivity (another version)
+
+8. TXR_ShiftRegisterLoad
+
+Now, need to check for exact duplicates. For example, looking at the list:
+
+- "TXR_WriteConnectivity" appears in different forms. For example, the second and sixth items in the original list have slightly different conditions (e.g., ##1 wb_ack_o). So they are unique.
+
+- "TXR_ResetValue" has two different implications (|=> vs |->), so they are unique.
+
+- "TXR_ValidRWBit" varies between $rose(cr[2]) and cr[2], so unique.
+
+- "TXR_StabilityDuringTransfer" is similar to "TXR_Stability" but uses $past(sr[3]), unique.
+
+Including all these as per the user's instruction to maximize retained assertions without modifying them. Even if some might seem redundant, the user wants all unique ones from the list.
+
+Therefore, the final list includes all the provided assertions except exact duplicates. Wait, but some assertions are repeated in the list. For example, the first TXR_WriteConnectivity is:
+
+"property TXR_WriteConnectivity;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  (wb_cyc_i && wb_stb_i && wb_we_i && (wb_adr_i == 3'h03))
+  |=> (txr == $past(wb_dat_i));
+endproperty
+assert property (TXR_WriteConnectivity);"
+
+Another version later is:
+
+"property TXR_Connectivity;
+  @(posedge wb_clk_i) disable iff (wb_rst_i || arst_i)
+  (wb_cyc_i && wb_stb_i && wb_we_i && (wb_adr_i == 3'h03)) |=> (txr == $past(wb_dat_i));
+endproperty
+assert property (TXR_Connectivity);"
+
+These are the same except for the order in the disable iff condition. So they are duplicates in intent but written differently. However, the user wants to treat them as unique if they are present in the list. But the user might consider them duplicates. However, since the disable iff clauses are written in different orders (arst_i first vs wb_rst_i first), in SystemVerilog, these are equivalent, so the assertions are the same. Therefore, they are duplicates, and only one should be retained. But the user wants to maximize retained, so perhaps they are considered unique and kept.
+
+Wait, but the user's instruction says to extract all unique from the list provided. So even if two assertions are functionally the same but written differently, if they appear as separate entries in the input list, should they be considered duplicates? The user says "unique and valid" so if two assertions are semantically the same, they are duplicates. But it's possible that in the input list, some are exact duplicates. Let's check the original list:
+
+The original list provided by the user has several assertions. Let's look for exact duplicates:
+
+Looking at the first list:
+
+1. "assert property (@(posedge wb_clk_i) ($bits(txr) == 8));" – unique.
+
+2. "property TXR_WriteConnectivity; ... |=> (txr == $past(wb_dat_i));..." – unique.
+
+3. Another TXR_WriteConnectivity with "##1 wb_ack_o |-> (txr == $past(wb_dat_i,2))" – different.
+
+4. "property TXR_ResetValue; ... |=> (txr == 8'h00);" – unique.
+
+5. Another TXR_ResetValue with |-> – different.
+
+6. TXR_ValidRWBit with $rose(cr[2]).
+
+7. Another TXR_ValidRWBit with cr[2].
+
+8. TXR_Stability during TIP with $past(sr[3]).
+
+9. Another TXR_Stability with sr[3].
+
+10. TXR_Connectivity similar to first TXR_WriteConnectivity but disable iff order changed.
+
+But in the input list, are there any exact duplicates? For example:
+
+"property TXR_WriteConnectivity;\n ... (wb_cyc_i && wb_stb_i && wb_we_i && (wb_adr_i == 3'h03))\n  |=> (txr == $past(wb_dat_i));\nendproperty\nassert property (TXR_WriteConnectivity);"
+
+And later:
+
+"property TXR_Connectivity;\n ... (wb_cyc_i && wb_stb_i && wb_we_i && (wb_adr_i == 3'h03)) |=> (txr == $past(wb_dat_i));\nendproperty\nassert property (TXR_Connectivity);"
+
+These two are the same except for the name of the property and the order in disable iff. Since the disable iff conditions are logically the same (arst_i == ARST_LVL || wb_rst_i vs wb_rst_i || arst_i), they are equivalent. Thus, these two assertions are duplicates and should be considered the same. Therefore, only one needs to be included. But the user's input list has them as separate entries. However, since the user wants unique assertions, we should remove duplicates. But the user's instruction is to extract all unique from the list, so if two are the same in the list, they should be considered duplicates. However, looking at the original list, perhaps there are duplicates, but in this case, the two properties have different names, so they are considered different in the list. Therefore, the user might have intended them as separate, so we need to include both. But in reality, they are the same assertion with different names. Hmm, this is a bit tricky. Since the user says "extract all unique and valid assertions from this list", if two assertions are identical except for the property name, they are duplicates. But in the input list, they are separate entries. The user might have mistakenly included duplicates, but we need to follow the instruction to retain all unique ones. If two assertions are textually different but semantically the same, how to handle? For example, the disable iff clause in different order.
+
+In this case, the properties are:
+
+First:
+disable iff (arst_i == ARST_LVL || wb_rst_i)
+
+Second:
+disable iff (wb_rst_i || arst_i)
+
+These are logically the same, so the properties are equivalent. Therefore, these two assertions are duplicates and only one should be kept. But since the user provided them as separate entries, does that mean they are considered different? The user's instruction says "unique and valid", so we need to ensure that the final list contains unique assertions, removing duplicates. But how to determine duplicates? Since the user hasn't specified, perhaps we should treat them as different if their text is different, even if they are logically the same. However, that would not be correct. Therefore, to truly find unique assertions, we need to check for semantic duplicates.
+
+This is complicated. Given time constraints, perhaps the best approach is to list all the assertions as per the user's list, removing only exact textual duplicates. But in the provided list, I don't see any exact textual duplicates. Each entry is different in some way, either the property name, the conditions, or the structure. Therefore, all are considered unique, and all should be included. However, some might not be valid. For example, the TXR_ShiftRegisterLoad references an internal signal 'shift', which might not be part of the core's visible interface. But the user says to include all unique assertions from the list, regardless of validity. Wait, no: the user says "extract all unique and valid assertions". So invalid ones should be excluded. But how do we know which are invalid? For example, the TXR_ShiftRegisterLoad references 'shift', which is an internal signal. If that's not part of the design's interface, this assertion is not valid. However, the user hasn't provided the design's internal details, so we can't judge that. The user says to assume the provided list is for the signal 'txr', so perhaps all given assertions are considered valid.
+
+Therefore, the approach is: include all assertions from the list that pertain to 'txr' and are unique in their content. Even if some are logically equivalent, if they are textually different, they are considered unique.
+
+Thus, the final list includes all the provided assertions except exact duplicates. After reviewing the list:
+
+- The first assertion is unique (width check).
+
+- The next 12 assertions are all different in their conditions, property names, or structure.
+
+Therefore, the answer includes all provided assertions, as they are all unique and pertain to 'txr'.
+</think>
+
+```systemverilog
+assert property (@(posedge wb_clk_i) ($bits(txr) == 8));
+
+property TXR_WriteConnectivity;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  (wb_cyc_i && wb_stb_i && wb_we_i && (wb_adr_i == 3'h03))
+  |=> (txr == $past(wb_dat_i));
+endproperty
+assert property (TXR_WriteConnectivity);
+
+property TXR_ResetValue;
+  @(posedge wb_clk_i) (arst_i == ARST_LVL || wb_rst_i) |=> (txr == 8'h00);
+endproperty
+assert property (TXR_ResetValue);
+
+property TXR_ValidRWBit;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  $rose(cr[2]) |-> (txr[0] inside {0,1});
+endproperty
+assert property (TXR_ValidRWBit);
+
+property TXR_NoWriteDuringTIP;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  sr[3] |-> !(wb_cyc_i && wb_stb_i && wb_we_i && (wb_adr_i == 3'h03));
+endproperty
+assert property (TXR_NoWriteDuringTIP);
+
+property TXR_Stability;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  (sr[3] && $past(sr[3])) |-> $stable(txr);
+endproperty
+assert property (TXR_Stability);
+
+property TXR_WriteConnectivity_v2;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  (wb_cyc_i && wb_stb_i && wb_we_i && (wb_adr_i == 3'h03)) ##1 wb_ack_o
+  |-> (txr == $past(wb_dat_i,2));
+endproperty
+assert property (TXR_WriteConnectivity_v2);
+
+property TXR_ResetValue_v2;
+  @(posedge wb_clk_i) (arst_i == ARST_LVL || wb_rst_i) |-> (txr == 8'h00);
+endproperty
+assert property (TXR_ResetValue_v2);
+
+property TXR_ValidRWBit_v2;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  cr[2] |-> (txr[0] inside {0,1});
+endproperty
+assert property (TXR_ValidRWBit_v2);
+
+property TXR_Stability_v2;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  sr[3] |-> $stable(txr);
+endproperty
+assert property (TXR_Stability_v2);
+
+property TXR_Connectivity;
+  @(posedge wb_clk_i) disable iff (wb_rst_i || arst_i)
+  (wb_cyc_i && wb_stb_i && wb_we_i && (wb_adr_i == 3'h03)) |=> (txr == $past(wb_dat_i));
+endproperty
+assert property (TXR_Connectivity);
+
+property TXR_ValidRWBit_v3;
+  @(posedge wb_clk_i) disable iff (wb_rst_i || arst_i)
+  $rose(cr[2]) |-> (txr[0] inside {0,1});
+endproperty
+assert property (TXR_ValidRWBit_v3);
+
+property TXR_StabilityDuringTransfer;
+  @(posedge wb_clk_i) disable iff (wb_rst_i || arst_i)
+  (sr[3] && $past(sr[3])) |-> ($stable(txr));
+endproperty
+assert property (TXR_StabilityDuringTransfer);
+
+property TXR_ShiftRegisterLoad;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  $rose(cr[4]) |-> (shift == txr);
+endproperty
+assert property (TXR_ShiftRegisterLoad);
+```

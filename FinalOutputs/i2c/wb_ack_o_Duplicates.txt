@@ -1,0 +1,122 @@
+assert property (@(posedge wb_clk_i) $bits(wb_ack_o) == 1);
+
+property ack_after_request;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  (wb_stb_i && wb_cyc_i) |=> wb_ack_o;
+endproperty
+assert property (ack_after_request);
+
+property ack_with_cyc;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  wb_ack_o |-> wb_cyc_i;
+endproperty
+assert property (ack_with_cyc);
+
+property no_spurious_ack;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  wb_ack_o |-> $past(wb_stb_i && wb_cyc_i, 1);
+endproperty
+assert property (no_spurious_ack);
+
+property ack_one_cycle;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  wb_ack_o |=> !wb_ack_o throughout (!(wb_stb_i && wb_cyc_i));
+endproperty
+assert property (ack_one_cycle);
+
+property ack_reset;
+  @(posedge wb_clk_i) 
+  (arst_i == ARST_LVL || wb_rst_i) |-> !wb_ack_o;
+endproperty
+assert property (ack_reset);
+
+property data_valid_on_ack;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  (wb_ack_o && !wb_we_i) |-> !$isunknown(wb_dat_o);
+endproperty
+assert property (data_valid_on_ack);
+
+property ack_timing;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  (wb_stb_i && wb_cyc_i) |=> ##1 wb_ack_o;
+endproperty
+assert property (ack_timing);
+
+property ack_bus_relationship;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  wb_ack_o |-> wb_cyc_i;
+endproperty
+assert property (ack_bus_relationship);
+
+property ack_reset_protection;
+  @(posedge wb_clk_i) 
+  (arst_i == ARST_LVL || wb_rst_i) |-> !wb_ack_o;
+endproperty
+assert property (ack_reset_protection);
+
+property ack_data_validity;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  (wb_ack_o && !wb_we_i) |-> !$isunknown(wb_dat_o);
+endproperty
+assert property (ack_data_validity);
+
+property single_ack_guarantee;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  (wb_stb_i && wb_cyc_i) |-> ##[1:2] wb_ack_o [->1];
+endproperty
+assert property (single_ack_guarantee);
+
+property ack_persistence_rule;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  wb_ack_o |=> !wb_ack_o || (wb_stb_i && wb_cyc_i);
+endproperty
+assert property (ack_persistence_rule);
+
+property ack_only_with_cyc;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  wb_ack_o |-> wb_cyc_i;
+endproperty
+assert property (ack_only_with_cyc);
+
+property ack_deassert_unless_new_req;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  wb_ack_o |=> (wb_ack_o ? (wb_stb_i && wb_cyc_i) : 1);
+endproperty
+assert property (ack_deassert_unless_new_req);
+
+property ack_cyc_relationship;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  wb_ack_o |-> $past(wb_cyc_i, 1);
+endproperty
+assert property (ack_cyc_relationship);
+
+property ack_pulse_width;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  $rose(wb_ack_o) |=> $fell(wb_ack_o);
+endproperty
+assert property (ack_pulse_width);
+
+property ack_data_valid;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  wb_ack_o |-> !$isunknown(wb_dat_o);
+endproperty
+assert property (ack_data_valid);
+
+property ack_reset_behavior;
+  @(posedge wb_clk_i)
+  (arst_i == ARST_LVL || wb_rst_i) |-> ##[0:$] !wb_ack_o;
+endproperty
+assert property (ack_reset_behavior);
+
+property ack_causality;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  wb_ack_o |-> $past(wb_stb_i && wb_cyc_i, 2);
+endproperty
+assert property (ack_causality);
+
+property ack_one_cycle;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  wb_ack_o |=> !wb_ack_o;
+endproperty
+assert property (ack_one_cycle);
+

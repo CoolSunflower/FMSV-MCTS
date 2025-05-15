@@ -1,0 +1,30 @@
+assert property (@(posedge wb_clk_i) $bits(scl_pad_i) == 1);
+
+assert property (@(posedge wb_clk_i) (scl_pad_oe == 0) |-> (scl_pad_o == 0 && scl_pad_i == 0));
+
+property scl_high_during_start;
+  @(posedge wb_clk_i) $fell(sda_pad_i) |-> scl_pad_i;
+endproperty
+assert property (scl_high_during_start);
+
+property scl_high_during_stop;
+  @(posedge wb_clk_i) $rose(sda_pad_i) |-> scl_pad_i;
+endproperty
+assert property (scl_high_during_stop);
+
+property start_condition_scl_high;
+  @(posedge wb_clk_i) $fell(sda_pad_i) |-> scl_pad_i;
+endproperty
+assert property (start_condition_scl_high);
+
+property stop_condition_scl_high;
+  @(posedge wb_clk_i) $rose(sda_pad_i) |-> scl_pad_i;
+endproperty
+assert property (stop_condition_scl_high);
+
+property scl_connectivity;
+  @(posedge wb_clk_i) (scl_pad_oe == 1'b0) |-> (scl_pad_i == scl_pad_o);
+endproperty
+
+assert property (scl_connectivity);
+

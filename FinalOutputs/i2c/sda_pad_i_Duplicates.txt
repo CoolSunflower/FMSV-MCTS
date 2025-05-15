@@ -1,0 +1,47 @@
+assert property (@(posedge wb_clk_i) ($bits(sda_pad_i) == 1));
+
+property sda_connectivity;
+  @(posedge wb_clk_i)
+  (sda_pad_oe == 1'b0) |-> (sda_pad_i == sda_pad_o);
+endproperty
+assert property (sda_connectivity);
+
+property sda_stable_during_scl_high;
+  @(posedge wb_clk_i)
+  (scl_pad_oe == 1'b0 && $rose(scl_pad_i)) |-> ##1 ($stable(sda_pad_i) throughout (scl_pad_i[->1]));
+endproperty
+assert property (sda_stable_during_scl_high);
+
+property sda_connectivity;
+  @(posedge wb_clk_i) disable iff (wb_rst_i)
+  (sda_pad_oe == 1'b0) |-> ##1 (sda_pad_i == sda_pad_o);
+endproperty
+assert property (sda_connectivity);
+
+property sda_stable_during_scl_high;
+  @(posedge wb_clk_i) disable iff (wb_rst_i)
+  (scl_pad_oe == 1'b0 && $fell(scl_pad_o) && 
+   sda_pad_oe == 1'b0 && !(cr[3] || cr[2])) |->
+  ($stable(sda_pad_i) throughout scl_pad_o[->1]);
+endproperty
+assert property (sda_stable_during_scl_high);
+
+property arbitration_loss;
+  @(posedge wb_clk_i) disable iff (wb_rst_i)
+  (sda_pad_oe == 1'b0 && sda_pad_o && !sda_pad_i) |->
+  ##1 sr[3];
+endproperty
+assert property (arbitration_loss);
+
+property start_condition;
+  @(posedge wb_clk_i) disable iff (wb_rst_i)
+  (cr[3] && scl_pad_o) |-> $fell(sda_pad_i);
+endproperty
+assert property (start_condition);
+
+property stop_condition;
+  @(posedge wb_clk_i) disable iff (wb_rst_i)
+  (cr[2] && scl_pad_o) |-> $rose(sda_pad_i);
+endproperty
+assert property (stop_condition);
+

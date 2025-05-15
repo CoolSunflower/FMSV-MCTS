@@ -1,0 +1,485 @@
+<think>
+Okay, let's go through this step by step. The user wants me to extract all unique and valid SystemVerilog assertions related to the signal wb_ack_o from the provided list, ensuring maximum retention and including any necessary assertions about the signal's width. They emphasized not modifying the assertions, just filtering and ensuring uniqueness.
+
+First, I'll start by listing out all the given assertions. Let me look through each one and note what they check for.
+
+1. **Assertion 1**: Checks that wb_ack_o is 1 bit wide using $bits. That's crucial for width validation.
+2. **Assertion 2 (ack_after_request)**: Ensures that after a request (stb and cyc), ack comes in the next cycle.
+3. **Assertion 3 (ack_with_cyc)**: Asserts that ack only occurs when cyc is active.
+4. **Assertion 4 (no_spurious_ack)**: Checks that ack is preceded by stb and cyc in the previous cycle.
+5. **Assertion 5 (ack_one_cycle)**: Ensures ack is only one cycle unless there's a new request.
+6. **Assertion 6 (ack_reset)**: Verifies that ack is low during reset.
+7. **Assertion 7 (data_valid_on_ack)**: Ensures data is valid when ack is high and it's a read operation.
+8. **Assertion 8 (ack_timing)**: Similar to assertion 2, checks ack comes one cycle after request.
+9. **Assertion 9 (ack_bus_relationship)**: Same as assertion 3, checks ack with cyc.
+10. **Assertion 10 (ack_reset_protection)**: Same as assertion 6.
+11. **Assertion 11 (ack_data_validity)**: Same as assertion 7.
+12. **Assertion 12 (single_ack_guarantee)**: Acknowledges within 1 or 2 cycles after request.
+13. **Assertion 13 (ack_persistence_rule)**: Ack doesn't persist unless new request.
+14. **Assertion 14 (ack_only_with_cyc)**: Same as assertions 3 and 9.
+15. **Assertion 15 (ack_deassert_unless_new_req)**: Similar to assertion 5.
+16. **Assertion 16 (ack_cyc_relationship)**: Checks if cyc was active in the previous cycle when ack is high.
+17. **Assertion 17 (ack_pulse_width)**: Ack rises and then falls in the next cycle.
+18. **Assertion 18 (ack_data_valid)**: General data validity on ack, not restricted to read.
+19. **Assertion 19 (ack_reset_behavior)**: Ack remains low after reset until released.
+20. **Assertion 20 (ack_causality)**: Ack is two cycles after request, which might conflict with others.
+21. **Assertion 21 (ack_one_cycle)**: Ack only lasts one cycle.
+
+Now, I need to identify duplicates or similar assertions. 
+
+- Assertions 3, 9, and 14 are the same.
+- Assertions 6 and 10 are the same.
+- Assertions 7 and 11 are the same.
+- Assertions 2 and 8 are similar but differ in the timing (assertion 8 uses ##1, which is the same as |=>).
+- Assertions 5, 15, 21 have slight differences. 5 uses 'throughout' which might cover more cases, 15 uses a implication with a ternary, 21 is simpler.
+- Assertion 18 is broader than 7 and 11 as it doesn't check for !wb_we_i.
+- Assertion 17 checks the pulse width, which is a specific case of one cycle.
+- Assertion 12 allows ack in 1 or 2 cycles, which is a different timing constraint.
+- Assertion 20 checks two cycles prior, which might not align with others.
+
+The width assertion (1) is unique and necessary.
+
+Now, compiling the unique ones while ensuring all aspects are covered:
+
+1. Keep the width check (1).
+2. Keep ack_after_request (2), which covers the basic timing.
+3. ack_with_cyc (3) for cyc relationship.
+4. no_spurious_ack (4) ensures ack follows a request.
+5. ack_one_cycle (5) as it's more detailed.
+6. ack_reset (6) for reset condition.
+7. data_valid_on_ack (7) for read data validity.
+8. ack_timing (8) might be redundant with 2, but wording differs, need to check. If they are the same, keep one. In this case, 2 uses |=> which is equivalent to ##1, so they are the same. So 2 and 8 are duplicates. Keep assertion 2.
+9. ack_bus_relationship (9) is duplicate of 3, skip.
+10. ack_reset_protection (10) same as 6, skip.
+11. ack_data_validity (11) same as 7, skip.
+12. single_ack_guarantee (12) is a different timing, keep.
+13. ack_persistence_rule (13) similar to 5 but phrased differently, maybe keep both.
+14. ack_only_with_cyc (14) same as 3, skip.
+15. ack_deassert_unless_new_req (15) similar to 5 but with implication. Might be redundant.
+16. ack_cyc_relationship (16) checks past cyc. Not covered by others, keep.
+17. ack_pulse_width (17) specific check on pulse, but might be covered by 5 and 21. Need to evaluate.
+18. ack_data_valid (18) broader than 7, keep both?
+19. ack_reset_behavior (19) is a longer version of 6, maybe keep both?
+20. ack_causality (20) checks two cycles prior, which might conflict, but it's unique.
+21. ack_one_cycle (21) same as 5? No, 21 is simpler: |=> !wb_ack_o. Whereas 5 has 'throughout'. So 5 is stricter. So need to check if they are different. Perhaps assertion 5 covers more cases, but 21 is a simpler version. To maximize retention, include both? But user says unique, so if they are different, keep both.
+
+This is getting complicated. To maximize retained assertions, even if some are similar but not exact duplicates, include them. However, the user wants unique assertions. So need to eliminate exact duplicates.
+
+Final list:
+
+1. $bits assertion (unique)
+2. ack_after_request (2)
+3. ack_with_cyc (3)
+4. no_spurious_ack (4)
+5. ack_one_cycle (5)
+6. ack_reset (6)
+7. data_valid_on_ack (7)
+8. single_ack_guarantee (12)
+9. ack_persistence_rule (13)
+10. ack_cyc_relationship (16)
+11. ack_pulse_width (17)
+12. ack_data_valid (18)
+13. ack_reset_behavior (19)
+14. ack_causality (20)
+15. ack_one_cycle (21) [if different from 5]
+
+Wait, assertion 21 is named ack_one_cycle but uses |=> !wb_ack_o. Assertion 5 uses 'throughout (!(wb_stb_i && wb_cyc_i))'. So they are different. 5 says that after ack, next cycle ack is low unless there's a new request. 21 says after ack, next cycle ack is low regardless. So 5 is more permissive if a new request comes. Therefore, they are different and both should be kept.
+
+But wait, assertion 21's code is: 
+
+property ack_one_cycle;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  wb_ack_o |=> !wb_ack_o;
+endproperty
+
+This enforces that after ack, it's deasserted next cycle, regardless of new requests. Whereas assertion 5 says:
+
+ack_one_cycle;
+  wb_ack_o |=> !wb_ack_o throughout (!(wb_stb_i && wb_cyc_i));
+
+Wait, the 'throughout' here is a bit confusing. The 'throughout' in SVA applies to the entire sequence. So the property in 5 says that if ack is high, then in the next cycle, ack is low for all cycles where !(stb && cyc). But if stb and cyc are asserted again, it might allow ack again. However, the way it's written might not be correct. Maybe the user intended that after ack, if there's no new request, ack stays low. But the 'throughout' might not be the right operator here. Regardless, the user wants all unique assertions, so both 5 and 21 should be included as they are written differently.
+
+Similarly, assertion 15 (ack_deassert_unless_new_req) is:
+
+wb_ack_o |=> (wb_ack_o ? (wb_stb_i && wb_cyc_i) : 1);
+
+Which means that if ack is high, next cycle if ack is still high, then stb and cyc must be high. Otherwise, anything is allowed. This is different from 5 and 21. So maybe this is also unique.
+
+But in the original list, the user provided assertion 5 and 21. So need to check all.
+
+This is getting too detailed, but the key point is to include all unique ones as per their original code, even if they seem similar. So go through each and check for duplicates.
+
+Original list entries:
+
+Assertion 1: unique.
+
+Assertion 2: ack_after_request: stb & cyc |=> ack.
+
+Assertion 3: ack_with_cyc: ack |-> cyc.
+
+Assertion 4: no_spurious_ack: ack |-> past(stb & cyc).
+
+Assertion 5: ack_one_cycle: ack |=> !ack throughout (!stb & !cyc). This is complex.
+
+Assertion 6: ack_reset: reset |-> !ack.
+
+Assertion 7: data_valid_on_ack: ack & !we |-> data valid.
+
+Assertion 8: ack_timing: same as 2? Let me see: (stb & cyc) |=> ##1 ack. Yes, |=> is equivalent to |=> ##1. So 2 and 8 are same. So only keep one.
+
+Similarly, assertion 9 is same as 3.
+
+So in the initial review:
+
+- 8 is duplicate of 2
+- 9 is duplicate of 3
+- 10 is duplicate of 6
+- 11 is duplicate of7
+- 14 is duplicate of3
+- 18 is similar to7 but broader.
+
+So unique assertions from the list, avoiding exact duplicates:
+
+1. Assertion 1: width check.
+
+2. Assertion 2: ack_after_request.
+
+3. Assertion3: ack_with_cyc.
+
+4. Assertion4: no_spurious_ack.
+
+5. Assertion5: ack_one_cycle (complex).
+
+6. Assertion6: ack_reset.
+
+7. Assertion7: data_valid_on_ack.
+
+8. Assertion12: single_ack_guarantee (ack within 1-2 cycles).
+
+9. Assertion13: ack_persistence_rule.
+
+10. Assertion16: ack_cyc_relationship (past cyc).
+
+11. Assertion17: ack_pulse_width.
+
+12. Assertion18: ack_data_valid (general data valid).
+
+13. Assertion19: ack_reset_behavior (reset until ack is low).
+
+14. Assertion20: ack_causality (2 cycles prior).
+
+15. Assertion21: ack_one_cycle (simple version).
+
+16. Assertion15: ack_deassert_unless_new_req.
+
+But need to check for code duplicates. For example, the code for ack_reset and ack_reset_protection is the same:
+
+property ack_reset:
+  @(posedge wb_clk_i) 
+  (arst_i == ARST_LVL || wb_rst_i) |-> !wb_ack_o;
+
+property ack_reset_protection:
+  same.
+
+Thus, these are duplicates and only one should be kept.
+
+Same for ack_with_cyc, ack_bus_relationship, ack_only_with_cyc: same code.
+
+Similarly, ack_data_valid_on_ack and ack_data_validity are the same.
+
+So the unique assertions after removing code duplicates are:
+
+1. $bits assertion.
+
+2. ack_after_request (2).
+
+3. ack_with_cyc (3).
+
+4. no_spurious_ack (4).
+
+5. ack_one_cycle (5).
+
+6. ack_reset (6).
+
+7. data_valid_on_ack (7).
+
+8. ack_timing (8) is duplicate of 2, so remove.
+
+9. single_ack_guarantee (12).
+
+10. ack_persistence_rule (13).
+
+11. ack_cyc_relationship (16).
+
+12. ack_pulse_width (17).
+
+13. ack_data_valid (18).
+
+14. ack_reset_behavior (19).
+
+15. ack_causality (20).
+
+16. ack_one_cycle (21).
+
+17. ack_deassert_unless_new_req (15).
+
+But need to check each code snippet to ensure they are not duplicates. For example, ack_reset and ack_reset_protection are same code, so keep only one. Similarly, ack_data_valid_on_ack and ack_data_validity are same.
+
+Original list entries (simplified):
+
+- 1. $bits
+
+2. ack_after_request
+
+3. ack_with_cyc
+
+4. no_spurious_ack
+
+5. ack_one_cycle (throughout version)
+
+6. ack_reset
+
+7. data_valid_on_ack
+
+8. single_ack_guarantee
+
+9. ack_persistence_rule
+
+10. ack_cyc_relationship
+
+11. ack_pulse_width
+
+12. ack_data_valid
+
+13. ack_reset_behavior
+
+14. ack_causality
+
+15. ack_deassert_unless_new_req
+
+16. ack_one_cycle (simple version)
+
+Now, check the reset assertions: 6 (ack_reset), 19 (ack_reset_behavior). Check the code:
+
+6: property ack_reset:
+   @(posedge wb_clk_i) 
+   (arst_i == ARST_LVL || wb_rst_i) |-> !wb_ack_o;
+
+19: property ack_reset_behavior:
+   @(posedge wb_clk_i)
+   (arst_i == ARST_LVL || wb_rst_i) |-> ##[0:$] !wb_ack_o;
+
+These are different. 6 is immediate, 19 checks that eventually after reset, ack is low. So both are unique.
+
+Similarly, data_valid_on_ack (7) and ack_data_valid (18):
+
+7: (wb_ack_o && !wb_we_i) |-> !$isunknown(wb_dat_o)
+
+18: wb_ack_o |-> !$isunknown(wb_dat_o)
+
+Different conditions, so both are kept.
+
+Also, ack_causality (20) checks past 2 cycles, which is different from no_spurious_ack (which checks 1 cycle).
+
+So all these are unique and should be included.
+
+So the final list includes all the unique ones after removing exact code duplicates. The original list has 21 items, but after removing duplicates, we have:
+
+Total unique assertions: 20?
+
+Wait, no. Let's count again, considering exact code duplicates:
+
+Looking back:
+
+Original list entries (21 items). Let's list each:
+
+1. assert property ($bits(wb_ack_o) == 1); — unique.
+
+2. property ack_after_request: (wb_stb_i && wb_cyc_i) |=> wb_ack_o; — unique.
+
+3. property ack_with_cyc: wb_ack_o |-> wb_cyc_i; — unique.
+
+4. no_spurious_ack: wb_ack_o |-> $past(wb_stb_i && wb_cyc_i, 1); — unique.
+
+5. ack_one_cycle: wb_ack_o |=> !wb_ack_o throughout (!(wb_stb_i && wb_cyc_i)); — unique.
+
+6. ack_reset: (arst_i == ARST_LVL || wb_rst_i) |-> !wb_ack_o; — unique.
+
+7. data_valid_on_ack: (wb_ack_o && !wb_we_i) |-> !$isunknown(wb_dat_o); — unique.
+
+8. ack_timing: same as 2. Code: (wb_stb_i && wb_cyc_i) |=> ##1 wb_ack_o; same as 2. So duplicate.
+
+9. ack_bus_relationship: same as 3. Code: wb_ack_o |-> wb_cyc_i; same as 3. Duplicate.
+
+10. ack_reset_protection: same as 6. Code: same. Duplicate.
+
+11. ack_data_validity: same as7. Duplicate.
+
+12. single_ack_guarantee: (wb_stb_i && wb_cyc_i) |-> ##[1:2] wb_ack_o [->1]; unique.
+
+13. ack_persistence_rule: wb_ack_o |=> !wb_ack_o || (wb_stb_i && wb_cyc_i); unique.
+
+14. ack_only_with_cyc: same as3. Duplicate.
+
+15. ack_deassert_unless_new_req: wb_ack_o |=> (wb_ack_o ? (wb_stb_i && wb_cyc_i) : 1); unique.
+
+16. ack_cyc_relationship: wb_ack_o |-> $past(wb_cyc_i, 1); unique.
+
+17. ack_pulse_width: $rose(wb_ack_o) |=> $fell(wb_ack_o); unique.
+
+18. ack_data_valid: wb_ack_o |-> !$isunknown(wb_dat_o); unique.
+
+19. ack_reset_behavior: (reset) |-> ##[0:$] !wb_ack_o; unique.
+
+20. ack_causality: wb_ack_o |-> $past(wb_stb_i && wb_cyc_i, 2); unique.
+
+21. ack_one_cycle: wb_ack_o |=> !wb_ack_o; unique.
+
+So from the original 21, removing duplicates 8,9,10,11,14, there are 16 unique assertions left. So including all these 16, plus the width assertion.
+
+But the user wants all unique ones, including width. So the answer includes:
+
+1. The width assertion.
+
+Plus the remaining 16, but wait, let's check again:
+
+After removing duplicates (8,9,10,11,14), the remaining are:
+
+Original indices: 1,2,3,4,5,6,7,12,13,15,16,17,18,19,20,21. So 16 items.
+
+Total unique assertions: 1 (width) + 16 others = 17.
+
+But need to verify each assertion's code to ensure they are unique.
+
+Final list:
+
+1. assert property (@(posedge wb_clk_i) $bits(wb_ack_o) == 1);
+
+2. property ack_after_request; ... |=> wb_ack_o;
+
+3. property ack_with_cyc; ... |-> wb_cyc_i;
+
+4. property no_spurious_ack; ... |-> $past(... 1);
+
+5. property ack_one_cycle (throughout);
+
+6. property ack_reset; ... |-> !wb_ack_o;
+
+7. property data_valid_on_ack; ... |-> !$isunknown(...) when !we_i;
+
+8. property single_ack_guarantee; ... |-> ##[1:2] ...;
+
+9. property ack_persistence_rule; ... |=> ... || ...;
+
+10. property ack_deassert_unless_new_req; ... |=> ... ? ... : 1;
+
+11. property ack_cyc_relationship; ... |-> $past(wb_cyc_i,1);
+
+12. property ack_pulse_width; ... |=> $fell(...);
+
+13. property ack_data_valid; ... |-> !$isunknown(...) without we check;
+
+14. property ack_reset_behavior; ... |-> ##[0:$] ...;
+
+15. property ack_causality; ... |-> $past(... 2);
+
+16. property ack_one_cycle (simple); ... |=> !wb_ack_o;
+
+All of these are unique and cover different aspects.
+
+Therefore, the final answer includes all these assertions, making sure none are missed and maximizing retention.
+</think>
+
+```systemverilog
+assert property (@(posedge wb_clk_i) $bits(wb_ack_o) == 1);
+
+property ack_after_request;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  (wb_stb_i && wb_cyc_i) |=> wb_ack_o;
+endproperty
+assert property (ack_after_request);
+
+property ack_with_cyc;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  wb_ack_o |-> wb_cyc_i;
+endproperty
+assert property (ack_with_cyc);
+
+property no_spurious_ack;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  wb_ack_o |-> $past(wb_stb_i && wb_cyc_i, 1);
+endproperty
+assert property (no_spurious_ack);
+
+property ack_one_cycle;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  wb_ack_o |=> !wb_ack_o throughout (!(wb_stb_i && wb_cyc_i));
+endproperty
+assert property (ack_one_cycle);
+
+property ack_reset;
+  @(posedge wb_clk_i) 
+  (arst_i == ARST_LVL || wb_rst_i) |-> !wb_ack_o;
+endproperty
+assert property (ack_reset);
+
+property data_valid_on_ack;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  (wb_ack_o && !wb_we_i) |-> !$isunknown(wb_dat_o);
+endproperty
+assert property (data_valid_on_ack);
+
+property single_ack_guarantee;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  (wb_stb_i && wb_cyc_i) |-> ##[1:2] wb_ack_o [->1];
+endproperty
+assert property (single_ack_guarantee);
+
+property ack_persistence_rule;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  wb_ack_o |=> !wb_ack_o || (wb_stb_i && wb_cyc_i);
+endproperty
+assert property (ack_persistence_rule);
+
+property ack_cyc_relationship;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  wb_ack_o |-> $past(wb_cyc_i, 1);
+endproperty
+assert property (ack_cyc_relationship);
+
+property ack_pulse_width;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  $rose(wb_ack_o) |=> $fell(wb_ack_o);
+endproperty
+assert property (ack_pulse_width);
+
+property ack_data_valid;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  wb_ack_o |-> !$isunknown(wb_dat_o);
+endproperty
+assert property (ack_data_valid);
+
+property ack_reset_behavior;
+  @(posedge wb_clk_i) 
+  (arst_i == ARST_LVL || wb_rst_i) |-> ##[0:$] !wb_ack_o;
+endproperty
+assert property (ack_reset_behavior);
+
+property ack_causality;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  wb_ack_o |-> $past(wb_stb_i && wb_cyc_i, 2);
+endproperty
+assert property (ack_causality);
+
+property ack_deassert_unless_new_req;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  wb_ack_o |=> (wb_ack_o ? (wb_stb_i && wb_cyc_i) : 1);
+endproperty
+assert property (ack_deassert_unless_new_req);
+
+property ack_one_cycle_simple;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  wb_ack_o |=> !wb_ack_o;
+endproperty
+assert property (ack_one_cycle_simple);
+```

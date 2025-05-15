@@ -1,0 +1,153 @@
+<think>
+Okay, let's tackle this step by step. The user wants me to extract all unique and valid SystemVerilog assertions related to the signal scl_pad_i from the provided list. They emphasized maximizing the number of retained assertions, especially not forgetting any related to width, connectivity, or functionality. Also, they mentioned that if the width assertion is missing, I should add it.
+
+First, I need to look through the given assertions and identify which ones involve scl_pad_i. Let me list them out:
+
+1. `assert property (@(posedge wb_clk_i) $bits(scl_pad_i) == 1);`  
+   This checks the width of scl_pad_i is 1 bit. That's a width assertion, so definitely include this.
+
+2. `assert property (@(posedge wb_clk_i) (scl_pad_oe == 0) |-> (scl_pad_o == 0 && scl_pad_i == 0));`  
+   Here, when scl_pad_oe is 0, it checks both scl_pad_o and scl_pad_i are 0. But this seems to mix scl_pad_i with scl_pad_o. Wait, according to the documentation, scl_pad_i is the input, and scl_pad_o is the output. The user is focusing on scl_pad_i, so this assertion might be relevant. However, the implication here might be about the driver being enabled or not. But maybe this is not directly checking scl_pad_i's behavior but the driver's. But since scl_pad_i is part of it, I'll note it.
+
+3. `property scl_high_during_start; @(posedge wb_clk_i) $fell(sda_pad_i) |-> scl_pad_i; endproperty assert property (scl_high_during_start);`  
+   This checks that during a start condition (falling edge of sda), scl_pad_i is high. This is a functional check for scl_pad_i during start conditions. Include.
+
+4. `property scl_high_during_stop; @(posedge wb_clk_i) $rose(sda_pad_i) |-> scl_pad_i; endproperty assert property (scl_high_during_stop);`  
+   Similar to the above but for stop conditions. Include.
+
+5. `property start_condition_scl_high; @(posedge wb_clk_i) $fell(sda_pad_i) |-> scl_pad_i; endproperty assert property (start_condition_scl_high);`  
+   This is the same as assertion 3. Duplicate. So we should include it once.
+
+6. `property stop_condition_scl_high; @(posedge wb_clk_i) $rose(sda_pad_i) |-> scl_pad_i; endproperty assert property (stop_condition_scl_high);`  
+   Same as assertion 4. Duplicate. So only need to include once.
+
+7. `property scl_connectivity; @(posedge wb_clk_i) (scl_pad_oe == 1'b0) |-> (scl_pad_i == scl_pad_o); endproperty assert property (scl_connectivity);`  
+   Checks that when the output enable is low, scl_pad_i equals scl_pad_o. But according to the documentation, when scl_pad_oe is 0, scl_pad_o is driving the line. However, scl_pad_i is the input. Wait, the connectivity example shows that scl_pad_i is connected to the SCL line. So when the core is driving (scl_padoen_oe is 0), scl_pad_o is output, and scl_pad_i should reflect the driven value. So when the core is driving (oe=0), scl_pad_i should equal scl_pad_o. But this assertion is written as: (scl_pad_oe == 0) implies scl_pad_i == scl_pad_o. Is this correct? Because when the core is driving, the line should be driven by scl_pad_o, so scl_pad_i (which is the input) would read the driven value. However, in reality, the SCL line is bidirectional. If the core is driving (oe=0), then scl_pad_o is the value driven, and scl_pad_i should reflect that. But this might not always hold because other masters could be driving. Wait, but in the core's case, if it's a master and driving SCL low, then other devices shouldn't be driving. However, during multi-master scenarios, arbitration might cause others to drive. But the assertion here is about connectivity, ensuring that when the core is driving (oe=0), the input scl_pad_i matches the output scl_pad_o. This may check the correct connection of the tri-state buffer. So this assertion is about the connectivity of the signal and should be included.
+
+Now, looking for unique assertions:
+
+- The first assertion is unique (width check).
+
+- Assertions 3 and 5 are duplicates. So we keep one.
+
+- Assertions 4 and 6 are duplicates. Keep one.
+
+- Assertion 2 and 7 are different. Assertion 2 checks that when oe is 0, both scl_pad_o and scl_pad_i are 0. But according to the documentation, if oe is 0, the core is driving scl_pad_o, and scl_pad_i is the input. So this assertion seems incorrect. Because if oe is 0, the core is driving scl_pad_o, but scl_pad_i is the actual line value. If the core is driving scl_pad_o to 0, then scl_pad_i should read 0. However, this assertion states that (scl_pad_oe == 0) implies both scl_pad_o and scl_pad_i are 0. That seems specific to a scenario where the core is driving 0. But the actual oe=0 can have scl_pad_o driven high or low. So this assertion might be checking that when oe is 0 (core is driving), then the output is 0 and the input is 0, which may not be a general case. Maybe this is a test for a specific condition, but it could be incorrect. However, since the user wants to maximize retained assertions, perhaps it's better to include it but check if it's valid.
+
+Wait, the user instruction says "extract all unique and valid assertions". So maybe assertion 2 is not valid for scl_pad_i. Let's see: (scl_pad_oe == 0) |-> (scl_pad_o == 0 && scl_pad_i == 0). But when oe is 0, the core is driving scl_pad_o. So scl_pad_o can be either 0 or 1, depending on the core's operation. The assertion seems to enforce that whenever oe is 0, both scl_pad_o and scl_pad_i are 0, which isn't correct. Because the core could be driving scl_pad_o high (if releasing the clock, for example). This might be an incorrect assertion. Therefore, perhaps this assertion is not valid and should be excluded. However, the user said to retain as much as possible. Alternatively, maybe this is a test case for when the core is actively driving low. But in general operation, this assertion would fail when the core is driving high. So this assertion is likely incorrect. Hence, it's not a valid general assertion and should be excluded.
+
+On the other hand, the 7th assertion: (scl_pad_oe == 0) |-> (scl_pad_i == scl_pad_o) is valid, as it checks that when the core is driving (oe=0), the input scl_pad_i matches the driven output scl_pad_o, which would be true if the tri-state buffer is correctly connected. So assertion 7 is valid.
+
+So the valid assertions related to scl_pad_i are:
+
+1. Width check: $bits(scl_pad_i) ==1.
+
+3. During start (sda fell), scl_pad_i is high.
+
+4. During stop (sda rose), scl_pad_i is high.
+
+7. Connectivity: when oe=0, scl_pad_i equals scl_pad_o.
+
+Additionally, check if any other assertions involving scl_pad_i are present. The original list includes the width assertion (1), which is the only width check. The others are for start/stop conditions and connectivity.
+
+So the unique valid assertions for scl_pad_i are:
+
+- Assertion 1 (width)
+
+- Assertion 3 (start condition, scl high)
+
+- Assertion 4 (stop condition, scl high)
+
+- Assertion 7 (connectivity)
+
+But wait, the user wants to extract all unique assertions for scl_pad_i. The duplicates (3 and 5, 4 and 6) are the same, so we include each once.
+
+Also, the user said to add the width assertion if missing. In this case, assertion 1 is already present.
+
+So the final list should include:
+
+1. Width check assertion.
+
+2. scl_high_during_start (same as start_condition_scl_high).
+
+3. scl_high_during_stop (same as stop_condition_scl_high).
+
+4. scl_connectivity.
+
+Additionally, the second assertion (assertion 2) was invalid as explained earlier, so exclude it.
+
+Thus, the unique assertions are:
+
+- The width check.
+
+- scl_high_during_start.
+
+- scl_high_during_stop.
+
+- scl_connectivity.
+
+Wait, but the user's list also included assertion 2. The user's instruction says to extract all unique and valid ones. Since assertion 2 involves scl_pad_i, but perhaps it's invalid, but the user wants to maximize retained assertions. However, according to the documentation, when scl_pad_oe is 0 (output enable), the core is driving the SCL line. So scl_pad_o is the value being driven, and scl_pad_i should reflect that. Therefore, when oe is 0, scl_pad_i should equal scl_pad_o. That's covered by assertion 7. Assertion 2 checks that when oe is 0, both scl_pad_o and scl_pad_i are 0, which would only be true when the core is driving 0, but not when driving 1. So that assertion is not generally valid. Therefore, it should be excluded.
+
+So the valid unique assertions are the four mentioned above.
+
+Check again the user's list. The provided assertions are:
+
+1. $bits(scl_pad_i) ==1.
+
+2. (scl_pad_oe==0) → scl_pad_o and scl_pad_i are 0.
+
+3. scl_high_during_start.
+
+4. scl_high_during_stop.
+
+5. same as 3.
+
+6. same as 4.
+
+7. scl_connectivity.
+
+So among these, the unique ones are 1, 2, 3, 4,7. But 5 and 6 are duplicates. The user's instruction says to extract unique ones.
+
+So the answer should include:
+
+1. Assertion 1.
+
+2. Assertion 3 (same as 5).
+
+3. Assertion 4 (same as 6).
+
+4. Assertion 7.
+
+But wait, assertion 2 is not valid. So exclude it.
+
+Thus, the final list includes:
+
+1. The width check.
+
+2. scl_high_during_start.
+
+3. scl_high_during_stop.
+
+4. scl_connectivity.
+
+So these four assertions are unique and valid for scl_pad_i.
+</think>
+
+```systemverilog
+assert property (@(posedge wb_clk_i) $bits(scl_pad_i) == 1);
+
+property scl_high_during_start;
+  @(posedge wb_clk_i) $fell(sda_pad_i) |-> scl_pad_i;
+endproperty
+assert property (scl_high_during_start);
+
+property scl_high_during_stop;
+  @(posedge wb_clk_i) $rose(sda_pad_i) |-> scl_pad_i;
+endproperty
+assert property (scl_high_during_stop);
+
+property scl_connectivity;
+  @(posedge wb_clk_i) (scl_pad_oe == 1'b0) |-> (scl_pad_i == scl_pad_o);
+endproperty
+assert property (scl_connectivity);
+```

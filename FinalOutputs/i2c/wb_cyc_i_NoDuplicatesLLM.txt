@@ -1,0 +1,100 @@
+<think>
+Okay, let's start by looking at the user's query. They want me to extract all unique and valid SystemVerilog assertions for the signal wb_cyc_i from the provided list. The key points are to maximize retention without modification, include any width-related assertions, and ensure uniqueness.
+
+First, I'll list out all the given assertions and check which ones are relevant to wb_cyc_i. The signal in question is wb_cyc_i, which is a 1-bit input indicating a valid bus cycle.
+
+Looking at the provided assertions:
+
+1. **assert property (@(posedge wb_clk_i) disable iff (wb_rst_i) wb_stb_i |-> wb_cyc_i);**  
+   This checks that whenever wb_stb_i is asserted, wb_cyc_i must also be asserted. Valid and specific to wb_cyc_i.
+
+2. **assert property (@(posedge wb_clk_i) disable iff (wb_rst_i) !wb_cyc_i |-> !wb_ack_o);**  
+   Ensures that if wb_cyc_i is not active, then wb_ack_o should not be asserted. Relates to wb_cyc_i's effect on other signals.
+
+3. **assert property (@(posedge wb_clk_i) ($bits(wb_cyc_i) == 1));**  
+   Directly checks that wb_cyc_i is 1-bit wide. Critical to include as per the user's note about width assertions.
+
+4. **property cyc_until_ack; ... endproperty assert property (cyc_until_ack);**  
+   Different versions of this property check that wb_cyc_i remains active until an ack is received. These are valid and relate to wb_cyc_i's behavior during transactions.
+
+5. **assert property (@(posedge wb_clk_i) wb_stb_i |-> wb_cyc_i);**  
+   Similar to the first assertion but without disable iff. Still valid and unique.
+
+6. **property exact_2cycle_txn; ... endproperty**  
+   Checks that a transaction completes in exactly 2 cycles. Part of the timing related to wb_cyc_i's role in transactions.
+
+Next, check for uniqueness. Some assertions are repeated with slight variations, like different property names but same checks. For example, there are multiple instances of cyc_until_ack with different ranges. I need to list each unique one even if similar.
+
+Width assertion is present as number 3, so that's covered. Also, the user emphasized not to modify any assertions, so I'll present them as-is, ensuring all unique ones are included, even if they seem similar but have different structures or conditions.
+
+Now, compile all the assertions that mention wb_cyc_i and ensure they are unique. Remove any exact duplicates but keep those with different scopes or conditions. For example, the transaction_timing property specifies ##2 for ack, which is a specific case.
+
+Finally, present all unique assertions in SystemVerilog code blocks as instructed.
+</think>
+
+```systemverilog
+// Width assertion
+assert property (@(posedge wb_clk_i) ($bits(wb_cyc_i) == 1));
+
+// Connectivity assertions
+assert property (@(posedge wb_clk_i) disable iff (wb_rst_i) wb_stb_i |-> wb_cyc_i);
+assert property (@(posedge wb_clk_i) wb_stb_i |-> wb_cyc_i);
+
+// Transaction timing assertions
+assert property (@(posedge wb_clk_i) disable iff (wb_rst_i) !wb_cyc_i |-> !wb_ack_o);
+assert property (@(posedge wb_clk_i) wb_rst_i |-> !wb_ack_o);
+
+// Cycle validity assertions
+property cyc_until_ack;
+  @(posedge wb_clk_i) disable iff (wb_rst_i)
+  (wb_cyc_i && wb_stb_i) |-> wb_cyc_i throughout (##[1:2] wb_ack_o);
+endproperty
+assert property (cyc_until_ack);
+
+property no_cyc_toggle;
+  @(posedge wb_clk_i) disable iff (wb_rst_i)
+  $rose(wb_cyc_i) |-> wb_cyc_i until wb_ack_o;
+endproperty
+assert property (no_cyc_toggle);
+
+// Transaction timing properties
+property exact_2cycle_txn;
+  @(posedge wb_clk_i) disable iff (wb_rst_i)
+  (wb_cyc_i && wb_stb_i) |-> ##2 wb_ack_o;
+endproperty
+assert property (exact_2cycle_txn);
+
+property cyc_stb_until_ack;
+  @(posedge wb_clk_i) disable iff (wb_rst_i)
+  (wb_cyc_i && wb_stb_i) |=> (wb_cyc_i && wb_stb_i) ##1 wb_ack_o;
+endproperty
+assert property (cyc_stb_until_ack);
+
+// Stability properties
+property input_stability;
+  @(posedge wb_clk_i) disable iff (wb_rst_i)
+  (wb_cyc_i && wb_stb_i) |-> 
+    (wb_adr_i == $past(wb_adr_i,2)) and 
+    (wb_dat_i == $past(wb_dat_i,2)) and
+    (wb_we_i == $past(wb_we_i,2)) until wb_ack_o;
+endproperty
+assert property (input_stability);
+
+property addr_stability;
+  @(posedge wb_clk_i) disable iff (wb_rst_i)
+  (wb_cyc_i && wb_stb_i) |-> ##[1:2] $stable(wb_adr_i);
+endproperty
+assert property (addr_stability);
+
+property data_stability;
+  @(posedge wb_clk_i) disable iff (wb_rst_i)
+  (wb_cyc_i && wb_stb_i) |-> ##[1:2] $stable(wb_dat_i);
+endproperty
+assert property (data_stability);
+
+property we_stability;
+  @(posedge wb_clk_i) disable iff (wb_rst_i)
+  (wb_cyc_i && wb_stb_i) |-> ##[1:2] $stable(wb_we_i);
+endproperty
+assert property (we_stability);
+```

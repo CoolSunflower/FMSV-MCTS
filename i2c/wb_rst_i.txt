@@ -1,0 +1,118 @@
+<think>
+Okay, let's tackle this problem. The user wants me to extract all unique and valid SystemVerilog assertions related to the signal `wb_rst_i` from the provided list. They emphasized maximizing the number of retained assertions and ensuring that assertions about the signal's width are included.
+
+First, I need to go through each assertion in the list and determine which ones are relevant to `wb_rst_i`. The user mentioned that the signal is a 1-bit synchronous reset, so any assertion that checks the width of `wb_rst_i` should be included. Looking at the list, the first assertion checks that `wb_rst_i` is 1 bit wide: `assert property (@(posedge wb_clk_i) $bits(wb_rst_i) == 1);`. That's crucial, so I'll include that.
+
+Next, I'll look for other assertions that involve `wb_rst_i` either in the antecedent or consequent. For example, assertions that check if certain signals or registers are reset when `wb_rst_i` is active. Each of these needs to be evaluated for uniqueness and validity.
+
+I notice several assertions about reset conditions. For instance, `prer_stable_reset` checks that the prescale register `prer` is set to `16'hFFFF` during reset. Another checks that the control register `ctr` is reset to `8'h00`. These are valid and unique, so they should be included.
+
+I also see multiple assertions about outputs like `scl_pad_oe`, `sda_pad_oe`, `wb_ack_o`, `wb_inta_o`, and others being in a specific state when `wb_rst_i` is active. These are all valid as they test the reset behavior of those signals.
+
+Some assertions might appear similar but check different parts of the design. For example, there are multiple properties ensuring that various registers (PRER, CTR, SR, CR, TXR, RXR) reset to their default values. Each of these is unique because they target different registers, so they should all be retained.
+
+I need to ensure there are no duplicates. For example, `prer_stable_reset` is mentioned twice with slightly different formulations, but the second one uses `throughout`, which might be redundant. However, both are valid checks, so I'll include them as separate assertions unless they are exact duplicates.
+
+Also, some assertions check the same register but have different names. For example, `PRER_Reset` and `p_reset_prescale_reg` both check the prescale register. I need to confirm if they are the same. Looking at the code, `PRER_Reset` uses `|->` while `p_reset_prescale_reg` uses `|=>`, which are different (immediate vs. next cycle). Therefore, both are unique and should be included.
+
+The same applies to `CTR_Reset` and `p_reset_control_reg`, which both check the control register reset but might have different timing. However, upon closer inspection, `CTR_Reset` uses `|->` (same cycle), while `p_reset_control_reg` also uses `|->`, so they might be duplicates. Wait, no—looking at the code, `CTR_Reset` is written as `wb_rst_i |-> (ctr == 8'h00);` and `p_reset_control_reg` is the same. So those are duplicates and should be merged, keeping only one instance.
+
+Wait, in the provided list, `property CTR_Reset` and `property p_reset_control_reg` both assert that when `wb_rst_i` is high, `ctr` is 0x00. These are duplicates, so only one should be kept. Similarly, `PRER_Reset` and `p_reset_prescale_reg` are different because one uses `|->` and the other `|=>`, so they are not duplicates.
+
+Another point is the assertion about `sr[5]` (BUSY flag) being cleared after reset. That's a specific check on the status register's BUSY bit, which is valid.
+
+I also need to check for any assertions that might not be valid. For example, `p_rw_exclusivity` checks for unknown bits in `wb_dat_o`, which doesn't directly relate to `wb_rst_i`, so it should be excluded.
+
+After filtering, I compile all the unique assertions that relate to `wb_rst_i`, ensuring each is included once. The final list includes checks on signal width, register resets, output states during reset, and specific flag resets.
+</think>
+
+```systemverilog
+// Assertion for signal width
+assert property (@(posedge wb_clk_i) $bits(wb_rst_i) == 1);
+
+// Reset propagation assertions
+property scl_oe_reset;
+  @(posedge wb_clk_i) wb_rst_i |-> scl_pad_oe;
+endproperty
+assert property (scl_oe_reset);
+
+property sda_oe_reset;
+  @(posedge wb_clk_i) wb_rst_i |-> sda_pad_oe;
+endproperty
+assert property (sda_oe_reset);
+
+property wb_outputs_reset;
+  @(posedge wb_clk_i) wb_rst_i |-> (wb_ack_o == 0 && wb_inta_o == 0);
+endproperty
+assert property (wb_outputs_reset);
+
+property prer_stable_reset;
+  @(posedge wb_clk_i) $rose(wb_rst_i) |=> always (prer == 16'hFFFF) until (!wb_rst_i);
+endproperty
+assert property (prer_stable_reset);
+
+property arbitration_lost_reset;
+  @(posedge wb_clk_i) wb_rst_i |-> !sr[2];
+endproperty
+assert property (arbitration_lost_reset);
+
+property wb_data_reset;
+  @(posedge wb_clk_i) 
+  wb_rst_i && !(wb_cyc_i && wb_stb_i) |-> wb_dat_o == 8'h00;
+endproperty
+assert property (wb_data_reset);
+
+property scl_data_reset;
+  @(posedge wb_clk_i) wb_rst_i |-> scl_pad_o == 1'b0;
+endproperty
+assert property (scl_data_reset);
+
+property sda_data_reset;
+  @(posedge wb_clk_i) wb_rst_i |-> sda_pad_o == 1'b0;
+endproperty
+assert property (sda_data_reset);
+
+// Register reset assertions
+property CTR_Reset;
+  @(posedge wb_clk_i) wb_rst_i |-> (ctr == 8'h00);
+endproperty
+assert property (CTR_Reset);
+
+property PRER_Reset;
+  @(posedge wb_clk_i) wb_rst_i |-> (prer == 16'hFFFF);
+endproperty
+assert property (PRER_Reset);
+
+property SR_Reset;
+  @(posedge wb_clk_i) wb_rst_i |-> (sr == 8'h00);
+endproperty
+assert property (SR_Reset);
+
+property CR_Reset;
+  @(posedge wb_clk_i) wb_rst_i |-> (cr == 8'h00);
+endproperty
+assert property (CR_Reset);
+
+property TXR_Reset;
+  @(posedge wb_clk_i) wb_rst_i |-> (txr == 8'h00);
+endproperty
+assert property (TXR_Reset);
+
+property RXR_Reset;
+  @(posedge wb_clk_i) wb_rst_i |-> (rxr == 8'h00);
+endproperty
+assert property (RXR_Reset);
+
+// Alternative formulations
+property p_reset_prescale_reg;
+  @(posedge wb_clk_i)
+  wb_rst_i |=> (prer == 16'hFFFF);
+endproperty
+assert property (p_reset_prescale_reg);
+
+property p_reset_busy_flag;
+  @(posedge wb_clk_i)
+  wb_rst_i |=> !sr[5];
+endproperty
+assert property (p_reset_busy_flag);
+```

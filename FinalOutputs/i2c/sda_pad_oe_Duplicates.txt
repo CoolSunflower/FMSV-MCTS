@@ -1,0 +1,119 @@
+assert property (@(posedge wb_clk_i) $bits(sda_pad_oe) == 1);
+
+assert property (@(posedge wb_clk_i) (ctr[7] == 0) |-> sda_pad_oe);
+
+assert property (@(posedge wb_clk_i) $fell(arst_i) |-> sda_pad_oe);
+
+assert property (@(posedge wb_clk_i) sr[2] |=> sda_pad_oe);
+
+assert property (@(posedge wb_clk_i) sr[2] |-> sda_pad_oe);
+
+assert property (@(posedge wb_clk_i) $rose(sr[4]) |-> !sda_pad_oe);
+
+assert property (@(posedge wb_clk_i) (cr[1] && sr[3]) |-> !sda_pad_oe);
+
+assert property (@(posedge wb_clk_i) $fell(sr[4]) |-> sda_pad_oe);
+
+assert property (@(posedge wb_clk_i) $rose(sr[2]) |-> ##[1:2] sda_pad_oe);
+
+assert property (@(posedge wb_clk_i) (ctr[7] == 1'b0) |-> sda_pad_oe);
+
+property wr_data_phase;
+  @(posedge wb_clk_i) 
+  (cr[2] && sr[3] && $past(sr[3],1)) |-> !sda_pad_oe; // Exclude first TIP cycle (ACK phase)
+endproperty
+assert property (wr_data_phase);
+
+property rd_ack_phase;
+  @(posedge wb_clk_i)
+  (cr[3] && sr[3] && $rose(sr[3])) |-> // ACK phase starts after TIP rises
+  (cr[4] ? sda_pad_oe : !sda_pad_oe); // ACK=1 (NACK) ? tri-state : drive low
+endproperty
+assert property (rd_ack_phase);
+
+property valid_start;
+  @(posedge wb_clk_i) 
+  $rose(sr[4]) && scl_pad_o |-> !sda_pad_oe; // SCL high during START
+endproperty
+assert property (valid_start);
+
+property valid_stop;
+  @(posedge wb_clk_i)
+  $fell(sr[4]) && scl_pad_o |-> sda_pad_oe; // SCL high during STOP
+endproperty
+assert property (valid_stop);
+
+property wr_data_phase;
+  @(posedge wb_clk_i) 
+  (cr[2] && sr[3] && $past(sr[3],1)) |-> !sda_pad_oe; // Exclude first TIP cycle
+endproperty
+assert property (wr_data_phase);
+
+property rd_ack_phase;
+  @(posedge wb_clk_i)
+  (cr[3] && $rose(sr[3])) |-> // ACK phase starts at TIP rise
+  (cr[4] ? sda_pad_oe : !sda_pad_oe); // ACK=1 ? tri-state : drive low
+endproperty
+assert property (rd_ack_phase);
+
+property valid_start;
+  @(posedge wb_clk_i) 
+  $rose(sr[4]) && scl_pad_o |-> !sda_pad_oe;
+endproperty
+assert property (valid_start);
+
+property valid_stop;
+  @(posedge wb_clk_i)
+  $fell(sr[4]) && scl_pad_o |-> sda_pad_oe;
+endproperty
+assert property (valid_stop);
+
+property p_scl_stretch;
+    @(posedge wb_clk_i) 
+    (scl_pad_i == 0) [*3] |=> $stable(sda_pad_oe); // Hold oe during stretching
+endproperty
+assert property (p_scl_stretch);
+
+property wr_oe;
+  @(posedge wb_clk_i) (cr[2] && sr[3]) |-> !sda_pad_oe;
+endproperty
+assert property (wr_oe);
+
+property rd_oe;
+  @(posedge wb_clk_i) (cr[3] && sr[3]) |-> sda_pad_oe;
+endproperty
+assert property (rd_oe);
+
+property start_oe;
+  @(posedge wb_clk_i) $rose(sr[4]) |-> !sda_pad_oe;
+endproperty
+assert property (start_oe);
+
+localparam SR_TIP = 3;
+property p_write_oe;
+    @(posedge wb_clk_i)
+    (sr[SR_TIP] && $past(cr[3])) |-> !sda_pad_oe; // WR command in previous cycle
+endproperty
+assert property (p_write_oe);
+
+localparam SR_TIP = 3;
+property p_read_oe;
+    @(posedge wb_clk_i)
+    (sr[SR_TIP] && $past(cr[2])) |-> sda_pad_oe; // RD command in previous cycle
+endproperty
+assert property (p_read_oe);
+
+localparam SR_TIP = 3;
+property p_ack_oe_write;
+    @(posedge wb_clk_i)
+    $fell(sr[SR_TIP]) && $past(cr[3],1) |-> sda_pad_oe; // WR transfer completion
+endproperty
+assert property (p_ack_oe_write);
+
+localparam SR_TIP = 3;
+property p_ack_oe_read;
+    @(posedge wb_clk_i)
+    $fell(sr[SR_TIP]) && $past(cr[2],1) |-> (sda_pad_oe == cr[4]); // RD transfer with ACK control
+endproperty
+assert property (p_ack_oe_read);
+

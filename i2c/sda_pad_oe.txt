@@ -1,0 +1,411 @@
+<think>
+Okay, let's tackle this step by step. The user provided a list of SystemVerilog assertions and wants me to extract all unique and valid ones related to the signal sda_pad_oe. They emphasized maximizing the number of retained assertions and ensuring that the width check is included.
+
+First, I need to go through each assertion in the list and determine which ones pertain to sda_pad_oe. Then, eliminate duplicates or very similar ones. Also, check if there's an assertion for the bit width of sda_pad_oe. If not, add it.
+
+Starting with the width assertion. The first assertion in the list is checking that $bits(sda_pad_oe) == 1. That's exactly what's needed for the width. So that should definitely be included.
+
+Next, looking for unique assertions. Let's list them out:
+
+1. assert property (@(posedge wb_clk_i) $bits(sda_pad_oe) == 1);
+   - Already covers the width check.
+
+2. assert property (@(posedge wb_clk_i) (ctr[7] == 0) |-> sda_pad_oe);
+   - Conditional implication based on ctr[7].
+
+3. assert property (@(posedge wb_clk_i) $fell(arst_i) |-> sda_pad_oe);
+   - Checks sda_pad_oe after arst_i falls.
+
+4. assert property (@(posedge wb_clk_i) sr[2] |=> sda_pad_oe);
+   - Checks if sr[2] leads to sda_pad_oe next cycle.
+
+5. assert property (@(posedge wb_clk_i) sr[2] |-> sda_pad_oe);
+   - Immediate assertion when sr[2] is high.
+
+6. assert property (@(posedge wb_clk_i) $rose(sr[4]) |-> !sda_pad_oe);
+   - On rising sr[4], sda_pad_oe should be low.
+
+7. assert property (@(posedge wb_clk_i) (cr[1] && sr[3]) |-> !sda_pad_oe);
+   - Combination of cr[1] and sr[3] implies low.
+
+8. assert property (@(posedge wb_clk_i) $fell(sr[4]) |-> sda_pad_oe);
+   - Falling sr[4] implies sda_pad_oe is high.
+
+9. assert property (@(posedge wb_clk_i) $rose(sr[2]) |-> ##[1:2] sda_pad_oe);
+   - After sr[2] rises, sda_pad_oe should be high in 1-2 cycles.
+
+10. "assert property (@(posedge wb_clk_i) (ctr[7] == 1'b0) |-> sda_pad_oe);"
+    - Similar to assertion 2 but using 1'b0 syntax. Since 1'b0 is equivalent to 0, this is a duplicate. Should be combined.
+
+Then there are several properties and assertions grouped together. Let's parse them:
+
+11. property wr_data_phase;\n  @(posedge wb_clk_i) \n  (cr[2] && sr[3] && $past(sr[3],1)) |-> !sda_pad_oe; \nendproperty\nassert property (wr_data_phase);
+    - Specific to write data phase, checking sda_pad_oe is low.
+
+12. property rd_ack_phase;\n  @(posedge wb_clk_i)\n  (cr[3] && sr[3] && $rose(sr[3])) |-> \n  (cr[4] ? sda_pad_oe : !sda_pad_oe); \nendproperty\nassert property (rd_ack_phase);
+    - Checks during read ack phase, depending on cr[4].
+
+13. property valid_start;\n  @(posedge wb_clk_i) \n  $rose(sr[4]) && scl_pad_o |-> !sda_pad_oe; \nendproperty\nassert property (valid_start);
+    - Similar to assertion 6 but adds scl_pad_o condition.
+
+14. property valid_stop;\n  @(posedge wb_clk_i)\n  $fell(sr[4]) && scl_pad_o |-> sda_pad_oe; \nendproperty\nassert property (valid_stop);
+    - Similar to assertion 8 but with scl_pad_o.
+
+15. Another wr_data_phase similar to 11, possibly same.
+
+16. Another rd_ack_phase similar to 12.
+
+17. Another valid_start and valid_stop same as 13 and 14.
+
+18. property p_scl_stretch;\n    @(posedge wb_clk_i) \n    (scl_pad_i == 0) [*3] |=> $stable(sda_pad_oe); \nendproperty\nassert property (p_scl_stretch);
+    - Checks stability of sda_pad_oe during clock stretching.
+
+19. property wr_oe;\n  @(posedge wb_clk_i) (cr[2] && sr[3]) |-> !sda_pad_oe;\nendproperty\nassert property (wr_oe);
+    - Similar to assertion 7 but different conditions (cr[2] instead of cr[1]).
+
+20. property rd_oe;\n  @(posedge wb_clk_i) (cr[3] && sr[3]) |-> sda_pad_oe;\nendproperty\nassert property (rd_oe);
+    - Checks read operation implies sda_pad_oe high.
+
+21. property start_oe;\n  @(posedge wb_clk_i) $rose(sr[4]) |-> !sda_pad_oe;\nendproperty\nassert property (start_oe);
+    - Same as assertion 6.
+
+22. Using localparam SR_TIP = 3; in properties p_write_oe and p_read_oe.
+
+23. p_write_oe checks sr[SR_TIP] and past cr[3], leading to !sda_pad_oe.
+
+24. p_read_oe checks sr[SR_TIP] and past cr[2], leading to sda_pad_oe.
+
+25. p_ack_oe_write checks on falling sr[SR_TIP] with past cr[3], implying sda_pad_oe.
+
+26. p_ack_oe_read checks falling sr[SR_TIP] with past cr[2], and sda_pad_oe == cr[4].
+
+Now, need to identify duplicates or overlapping conditions.
+
+Assertions 2 and 10 are the same, just syntax difference (ctr[7] == 0 vs 1'b0). Keep one.
+
+Similarly, valid_start (13) and start_oe (21) overlap but valid_start adds scl_pad_o condition. Are they duplicates? No, because the conditions differ. So both are unique.
+
+wr_data_phase (11) and wr_oe (19) have different conditions. 11 includes cr[2], sr[3], and $past(sr[3],1), while 19 uses cr[2] and sr[3]. So they check different scenarios.
+
+Similarly, some properties use localparam SR_TIP = 3. sr[3] is SR_TIP. So assertions using sr[3] are equivalent to those using SR_TIP. For example, assertion 7's sr[3] is the same as SR_TIP.
+
+Need to check if any of the properties with localparams are duplicates of prior ones. For example, p_write_oe vs wr_oe. p_write_oe checks sr[SR_TIP] (sr[3]) and $past(cr[3]), leading to !sda_pad_oe. wr_oe checks cr[2] && sr[3] leading to !sda_pad_oe. Different conditions, so unique.
+
+Other properties like p_ack_oe_write and p_ack_oe_read involve falling edge of sr[SR_TIP], which is different from other assertions.
+
+The goal is to retain all unique ones. Also, check for any missing. The user wants maximum retention, so unless two assertions are exactly the same (same conditions and implications), they should be kept.
+
+Now, list out all unique ones:
+
+1. Width check: already present as first assertion.
+
+2. (ctr[7] == 0) |-> sda_pad_oe
+
+3. $fell(arst_i) |-> sda_pad_oe
+
+4. sr[2] |=> sda_pad_oe
+
+5. sr[2] |-> sda_pad_oe
+
+6. $rose(sr[4]) |-> !sda_pad_oe (also in start_oe and valid_start)
+
+Wait, start_oe is the same as assertion 6? Let's check:
+
+Assertion 6: $rose(sr[4]) |-> !sda_pad_oe
+
+property start_oe: $rose(sr[4]) |-> !sda_pad_oe
+
+Yes, same. So these are duplicates.
+
+Similarly, valid_start includes scl_pad_o in the condition. So different from assertion 6. So valid_start is unique.
+
+So need to check for duplicates in the list.
+
+Another example: property valid_stop (14) and assertion 8. Assertion 8: $fell(sr[4]) |-> sda_pad_oe. valid_stop adds scl_pad_o. So different, hence unique.
+
+Now, compile the final list, ensuring each is unique and covers different scenarios.
+
+The final list should include:
+
+- The width assertion.
+- All the others, unless they are exact duplicates.
+
+Looking back at the original list, the user provided many assertions. Need to check:
+
+Is there any assertion that checks sda_pad_oe's width? Yes, the first one.
+
+Check for duplicates:
+
+Assertion 2 and 10 are the same, so only keep one.
+
+From the list:
+
+"assert property (@(posedge wb_clk_i) (ctr[7] == 1'b0) |-> sda_pad_oe);"
+
+But in the list, the first is (ctr[7]==0) and the 10th is (ctr[7]==1'b0). Since 0 and 1'b0 are same in SV, these are duplicates. So keep one.
+
+Now, list all remaining assertions:
+
+1. Width check
+
+2. (ctr[7]==0 |-> sda_pad_oe)
+
+3. $fell(arst_i) |-> sda_pad_oe
+
+4. sr[2] |=> sda_pad_oe
+
+5. sr[2] |-> sda_pad_oe
+
+6. $rose(sr[4]) |-> !sda_pad_oe (assertion 6)
+
+7. (cr[1] && sr[3]) |-> !sda_pad_oe
+
+8. $fell(sr[4]) |-> sda_pad_oe (assertion 8)
+
+9. $rose(sr[2]) |-> ##[1:2] sda_pad_oe
+
+10. property wr_data_phase (11)
+
+11. property rd_ack_phase (12)
+
+12. valid_start (13) with scl_pad_o
+
+13. valid_stop (14) with scl_pad_o
+
+14. another wr_data_phase (15) same as 11? Let me check: same code, yes. So duplicate.
+
+Similarly, rd_ack_phase (16) same as 12. So duplicates.
+
+valid_start/valid_stop (17) same as 13/14. So duplicates.
+
+p_scl_stretch (18) unique.
+
+wr_oe (19) unique.
+
+rd_oe (20) unique.
+
+start_oe (21) same as assertion 6.
+
+p_write_oe (22's first) unique.
+
+p_read_oe (23) unique.
+
+p_ack_oe_write (24) unique.
+
+p_ack_oe_read (25) unique.
+
+So in the user's list, they have:
+
+Original list has:
+
+1. Width assertion
+
+2. ctr[7]==0
+
+3. $fell(arst_i |-> sda_pad_oe
+
+4. sr[2] |=> sda_pad_oe
+
+5. sr[2] |-> sda_pad_oe
+
+6. $rose(sr[4}) |-> !sda_pad_oe
+
+7. (cr[1] && sr[3}) |-> !sda_pad_oe
+
+8. $fell(sr[4}) |-> sda_pad_oe
+
+9. $rose(sr[2}) |-> ##[1:2] sda_pad_oe
+
+10. ctr[7]==1'b0 (same as 2)
+
+Then properties like valid_start, valid_stop, etc.
+
+So to compile all unique ones:
+
+First, include the width check.
+
+Then assertions 2-9 (excluding 10 as duplicate).
+
+Then the properties:
+
+wr_data_phase (11)
+
+rd_ack_phase (12)
+
+valid_start (13)
+
+valid_stop (14)
+
+p_scl_stretch (18)
+
+wr_oe (19)
+
+rd_oe (20)
+
+p_write_oe (22)
+
+p_read_oe (23)
+
+p_ack_oe_write (24)
+
+p_ack_oe_read (25)
+
+But need to check if these properties are already covered by earlier assertions. For example, valid_start is similar to assertion 6 but with scl_pad_o. Since the conditions are different, they are both valid.
+
+Another example: wr_oe in property (19) is (cr[2] && sr[3}) |-> !sda_pad_oe. This might not be covered by earlier assertions. So it's unique.
+
+Similarly, p_write_oe uses $past(cr[3}), etc.
+
+The key is that each of these assertions checks different conditions leading to sda_pad_oe's value, hence they are all unique and valid.
+
+The final list should include all these, removing exact duplicates and ensuring the width check is present.
+
+So the final list will have:
+
+1. Width assertion
+
+2. ctr[7]==0 |-> sda_pad_oe
+
+3. $fell(arst_i) |-> sda_pad_oe
+
+4. sr[2] |=> sda_pad_oe
+
+5. sr[2] |-> sda_pad_oe
+
+6. $rose(sr[4}) |-> !sda_pad_oe
+
+7. (cr[1] && sr[3}) |-> !sda_pad_oe
+
+8. $fell(sr[4}) |-> sda_pad_oe
+
+9. $rose(sr[2}) |-> ##[1:2] sda_pad_oe
+
+10. wr_data_phase property (11)
+
+11. rd_ack_phase property (12)
+
+12. valid_start property (13)
+
+13. valid_stop property (14)
+
+14. p_scl_stretch (18)
+
+15. wr_oe (19)
+
+16. rd_oe (20)
+
+17. p_write_oe (22)
+
+18. p_read_oe (23)
+
+19. p_ack_oe_write (24)
+
+20. p_ack_oe_read (25)
+
+Plus any others that are unique and not duplicates.
+
+Now, some of the properties in the user's list may have been repeated but formatted differently. For example, in the user's list, there's:
+
+property wr_data_phase;\n ... same ... 
+
+appearing twice. So need to check for duplicates in the original input list.
+
+In the user's list, the entries 15 and 16:
+
+15. 'property wr_data_phase;\n  @(posedge wb_clk_i) \n  (cr[2] && sr[3] && $past(sr[3],1)) |-> !sda_pad_oe; // Exclude first TIP cycle\nendproperty\nassert property (wr_data_phase);'
+
+This is the same as entry 11. So duplicates. Similarly, entry 16 is same as 12, entry 17 same as 13, 18 same as 14.
+
+Therefore, in the user's input list, entries 11-14 and 15-18 are duplicates. So in the final list, we should include only one instance of each unique property.
+
+Therefore, after removing duplicates from the user's input list, but retaining all unique ones.
+
+So the final answer should list all unique assertions from the original list, removing exact duplicates, and including the width check.
+
+Additionally, ensure that all the properties defined with 'property' and 'assert property' are included as separate entries if they are unique.
+
+In conclusion, the final list will include all the unique assertions provided in the user's list, including the width check, and ensuring that no two assertions are identical.
+</think>
+
+```systemverilog
+parameter SR_TIP = 3;
+
+// Width check assertion
+assert property (@(posedge wb_clk_i) $bits(sda_pad_oe) == 1);
+
+// Signal behavior assertions
+assert property (@(posedge wb_clk_i) (ctr[7] == 0) |-> sda_pad_oe);
+assert property (@(posedge wb_clk_i) $fell(arst_i) |-> sda_pad_oe);
+assert property (@(posedge wb_clk_i) sr[2] |=> sda_pad_oe);
+assert property (@(posedge wb_clk_i) sr[2] |-> sda_pad_oe);
+assert property (@(posedge wb_clk_i) $rose(sr[4]) |-> !sda_pad_oe);
+assert property (@(posedge wb_clk_i) (cr[1] && sr[3]) |-> !sda_pad_oe);
+assert property (@(posedge wb_clk_i) $fell(sr[4]) |-> sda_pad_oe);
+assert property (@(posedge wb_clk_i) $rose(sr[2]) |-> ##[1:2] sda_pad_oe);
+
+// Formal verification properties
+property wr_data_phase;
+  @(posedge wb_clk_i)
+  (cr[2] && sr[3] && $past(sr[3],1)) |-> !sda_pad_oe;
+endproperty
+assert property (wr_data_phase);
+
+property rd_ack_phase;
+  @(posedge wb_clk_i)
+  (cr[3] && sr[3] && $rose(sr[3])) |-> (cr[4] ? sda_pad_oe : !sda_pad_oe);
+endproperty
+assert property (rd_ack_phase);
+
+property valid_start;
+  @(posedge wb_clk_i)
+  $rose(sr[4]) && scl_pad_o |-> !sda_pad_oe;
+endproperty
+assert property (valid_start);
+
+property valid_stop;
+  @(posedge wb_clk_i)
+  $fell(sr[4]) && scl_pad_o |-> sda_pad_oe;
+endproperty
+assert property (valid_stop);
+
+property p_scl_stretch;
+  @(posedge wb_clk_i)
+  (scl_pad_i == 0) [*3] |=> $stable(sda_pad_oe);
+endproperty
+assert property (p_scl_stretch);
+
+property wr_oe;
+  @(posedge wb_clk_i) (cr[2] && sr[3]) |-> !sda_pad_oe;
+endproperty
+assert property (wr_oe);
+
+property rd_oe;
+  @(posedge wb_clk_i) (cr[3] && sr[3]) |-> sda_pad_oe;
+endproperty
+assert property (rd_oe);
+
+// Localparam-based assertions
+property p_write_oe;
+  @(posedge wb_clk_i)
+  (sr[SR_TIP] && $past(cr[3])) |-> !sda_pad_oe;
+endproperty
+assert property (p_write_oe);
+
+property p_read_oe;
+  @(posedge wb_clk_i)
+  (sr[SR_TIP] && $past(cr[2])) |-> sda_pad_oe;
+endproperty
+assert property (p_read_oe);
+
+property p_ack_oe_write;
+  @(posedge wb_clk_i)
+  $fell(sr[SR_TIP]) && $past(cr[3],1) |-> sda_pad_oe;
+endproperty
+assert property (p_ack_oe_write);
+
+property p_ack_oe_read;
+  @(posedge wb_clk_i)
+  $fell(sr[SR_TIP]) && $past(cr[2],1) |-> (sda_pad_oe == cr[4]);
+endproperty
+assert property (p_ack_oe_read);
+```

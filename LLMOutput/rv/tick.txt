@@ -1,0 +1,85 @@
+<think>
+Okay, let's tackle generating the SVAs for the 'tick' signal. First, I need to make sure I understand all the requirements from the specification and the feedback provided.
+
+The 'tick' signal is a 1-bit output that generates periodic pulses based on the prescaler value. It increments the mtime register by the step value each time it pulses. The key points are:
+
+1. **Width Check**: Ensure 'tick' is always 1-bit.
+2. **Connectivity**: 'tick' should be low during reset (!rst_ni) or when the module is inactive (!active).
+3. **Functionality**:
+   - **Periodicity**: 'tick' must pulse every (prescaler + 1) clock cycles when active and not in reset.
+   - **Single-Cycle Pulse**: 'tick' should stay high for only one cycle unless prescaler is 0, where it pulses every cycle.
+   - **mtime Update**: When 'tick' is high, mtime_d should be mtime + step. When 'tick' is low, mtime_d remains unchanged.
+
+From the feedback, previous attempts had issues with using variables in delays (##prescaler), which isn't allowed. Also, handling prescaler=0 and asynchronous reset needed correction.
+
+So, to address periodicity without variable delays, I'll use a sequence with a local counter. For prescaler=0, ensure 'tick' pulses every cycle. Also, handle asynchronous reset properly with disable iff.
+
+Let me structure each assertion step by step, ensuring they cover all cases and are syntactically correct.
+</think>
+
+[REASONING]
+1. **Width Check**: Direct verification using `$bits`.
+2. **Connectivity**:
+   - `tick` must be 0 during reset (!rst_ni) or inactivity (!active).
+3. **Functionality**:
+   - **Periodicity**: Use local counter to track cycles between ticks.
+   - **Single-Cycle Enforcement**: Prevent consecutive ticks unless prescaler=0.
+   - **mtime Update**: Validate increment on tick and stability otherwise.
+   - **Edge Cases**: Handle max prescaler value (4095) and prescaler=0.
+
+[SVAs]
+```systemverilog
+// Width assertion
+assert property (@(posedge clk_i) $bits(tick) == 1);
+
+// Connectivity: Tick suppressed during reset/inactive
+property tick_reset_inactive;
+  @(posedge clk_i) disable iff (!rst_ni || !active)
+  !rst_ni || !active |-> !tick;
+endproperty
+assert property (tick_reset_inactive);
+
+// Periodicity: Ticks every (prescaler + 1) cycles
+property tick_periodicity;
+  int count;
+  @(posedge clk_i) disable iff (!rst_ni || !active)
+  ($rose(tick), count=0) |=> 
+    (1, count++)[*0:$] ##0 (tick && (count == prescaler + 1));
+endproperty
+assert property (tick_periodicity);
+
+// Single-cycle pulse enforcement (prescaler > 0)
+property tick_single_cycle;
+  @(posedge clk_i) disable iff (!rst_ni || !active)
+  (tick && prescaler > 0) |=> !tick;
+endproperty
+assert property (tick_single_cycle);
+
+// Continuous pulsing when prescaler=0
+property tick_prescaler_zero;
+  @(posedge clk_i) disable iff (!rst_ni || !active)
+  (prescaler == 0) |-> ##1 tick;
+endproperty
+assert property (tick_prescaler_zero);
+
+// mtime increment on tick
+property mtime_update;
+  @(posedge clk_i) disable iff (!rst_ni)
+  tick |=> (mtime_d == $past(mtime) + step);
+endproperty
+assert property (mtime_update);
+
+// mtime stability without tick
+property mtime_stable;
+  @(posedge clk_i) disable iff (!rst_ni)
+  !tick |-> mtime_d == mtime;
+endproperty
+assert property (mtime_stable);
+
+// Max prescaler value handling (4095)
+property prescaler_max_check;
+  @(posedge clk_i) disable iff (!rst_ni || !active)
+  (prescaler == 4095 && tick) |-> ##4096 tick;
+endproperty
+assert property (prescaler_max_check);
+```

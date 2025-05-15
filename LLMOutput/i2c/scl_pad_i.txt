@@ -1,0 +1,74 @@
+<think>
+Okay, let's tackle generating the SVAs for scl_pad_i. First, I need to understand the signal's role. It's the input for the SCL line in an I2C interface, which is open-drain with external pull-up resistors. The core uses this to monitor the actual SCL state.
+
+Starting with the width assertion. The spec says it's a 1-bit input, so that's straightforward. Just check the bit width.
+
+Next, connectivity. The core drives SCL through scl_pad_o when scl_pad_oe is 0. Since it's open-drain, when the core drives (oe=0), scl_pad_o should be 0, and scl_pad_i should reflect that. But if the core isn't driving (oe=1), scl_pad_i depends on other devices. So the connectivity assertion should ensure that when the core is driving, the input matches the output (which should be 0). Also, when not driving, the line should be high unless another device pulls it low, but that's harder to assert without knowing external states.
+
+For functionality, the key I2C protocol points are START and STOP conditions. START is SDA falling while SCL is high; STOP is SDA rising while SCL is high. So assertions need to check that during these transitions, SCL is indeed high. Also, during data phases, SDA should only change when SCL is low. Clock stretching is another aspect where SCL can be held low by a slave, but that might require checking for prolonged low periods, which could be tricky without timing parameters.
+
+Looking at previous feedback, there were issues with the connectivity assertion not correctly handling open-drain behavior. The corrected version should ensure that when the core drives, scl_pad_o is 0 and scl_pad_i follows. Also, using wb_clk_i for sampling might miss asynchronous events, but without using SCL as the clock, it's a limitation to note.
+
+Putting it all together, the SVAs should include:
+
+1. Width check.
+2. Connectivity checks for when the core is driving (oe=0) and not driving (oe=1).
+3. Protocol checks for START/STOP conditions.
+4. Data phase stability (SDA changes only when SCL is low).
+5. Clock stretching detection (optional if timing info is available).
+
+Need to ensure signal names match the mapping, like using scl_pad_oe instead of scl_padoen_oe. Also, consider arbitration scenarios where another master might drive SCL low, but that might be covered by existing assertions if they check for SCL state during specific conditions.
+</think>
+
+```systemverilog
+// Width assertion: scl_pad_i must always be 1-bit
+assert property (@(posedge wb_clk_i) $bits(scl_pad_i) == 1);
+
+// Open-drain connectivity assertion
+// When core drives SCL (oe=0), it must drive low and input must match
+property scl_drive_low;
+    @(posedge wb_clk_i) (scl_pad_oe == 0) |-> (scl_pad_o == 0 && scl_pad_i == 0);
+endproperty
+assert property (scl_drive_low);
+
+// Tri-state high impedance check
+// When not driving (oe=1), line should be pulled high unless driven by others
+property scl_pullup;
+    @(posedge wb_clk_i) (scl_pad_oe == 1) |-> (scl_pad_i === 1'bz || scl_pad_i === 1'b0);
+endproperty
+assert property (scl_pullup);
+
+// START condition: SDA fall while SCL high
+property start_condition;
+    @(posedge wb_clk_i) $fell(sda_pad_i) |-> scl_pad_i;
+endproperty
+assert property (start_condition);
+
+// STOP condition: SDA rise while SCL high
+property stop_condition;
+    @(posedge wb_clk_i) $rose(sda_pad_i) |-> scl_pad_i;
+endproperty
+assert property (stop_condition);
+
+// Data stability: SDA changes only when SCL is low
+property sda_stability;
+    @(posedge wb_clk_i) $changed(sda_pad_i) |-> !scl_pad_i;
+endproperty
+assert property (sda_stability);
+
+// Clock stretching detection
+// SCL low for more than 20 cycles indicates stretching
+property clock_stretching;
+    @(posedge wb_clk_i) (scl_pad_i === 1'b0) [*20] |-> ##[1:$] (scl_pad_i === 1'b1);
+endproperty
+assert property (clock_stretching);
+```
+
+**Key Improvements:**
+1. **Open-Drain Validation:** Explicit check for low-driven output when enabled
+2. **Tri-State Behavior:** Verifies high-impedance state matches pull-up expectations
+3. **Protocol Compliance:** Covers START/STOP conditions and data phase stability
+4. **Clock Stretching:** Detects extended low periods (adjust 20 cycles per spec)
+5. **Signal Stability:** Ensures SDA changes only during SCL low phases
+
+**Note:** The clock stretching detection uses a generic 20-cycle threshold - replace with actual prescale value from the PRER register for precise verification.

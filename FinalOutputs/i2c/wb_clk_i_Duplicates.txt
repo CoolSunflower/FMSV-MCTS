@@ -1,0 +1,87 @@
+parameter ARST_LVL = 1'b0;
+property wb_ack_within_2_cycles;
+    @(posedge wb_clk_i) 
+    (wb_cyc_i && wb_stb_i) |-> ##[1:2] wb_ack_o;
+endproperty
+assert property (wb_ack_within_2_cycles);
+parameter ARST_LVL = 1'b0;
+property wb_clk_valid;
+    @(posedge wb_clk_i) 
+    disable iff (arst_i !== ARST_LVL || wb_rst_i)
+    !$isunknown(wb_clk_i);
+endproperty
+assert property (wb_clk_valid);
+parameter ARST_LVL = 1'b0;
+property wb_clk_toggle;
+    @(posedge wb_clk_i) 
+    not (##[1:$] $stable(wb_clk_i));
+endproperty
+assert property (wb_clk_toggle);
+parameter ARST_LVL = 1'b0;
+property wb_data_stable;
+    @(posedge wb_clk_i) 
+    (wb_cyc_i && wb_stb_i) |-> $stable(wb_dat_i) and $stable(wb_adr_i);
+endproperty
+assert property (wb_data_stable);
+parameter ARST_LVL = 1'b0;
+property prescale_valid;
+    @(posedge wb_clk_i) 
+    $changed(prer) |-> (prer != 0);
+endproperty
+assert property (prescale_valid);
+parameter ARST_LVL = 1'b0;
+property wb_clk_valid;
+    @(posedge wb_clk_i) 
+    disable iff (arst_i != ARST_LVL || wb_rst_i) // Sync with both reset types
+    !$isunknown(wb_clk_i);
+endproperty
+assert property (wb_clk_valid);
+parameter ARST_LVL = 1'b0;
+property wb_clk_activity;
+    @(posedge wb_clk_i)
+    disable iff (arst_i != ARST_LVL || wb_rst_i)
+    ##[1:1000] $changed(wb_clk_i); // Adjust cycle limit per system requirements
+endproperty
+assert property (wb_clk_activity);
+parameter ARST_LVL = 1'b0;
+property wb_clk_valid;
+    disable iff (arst_i !== ARST_LVL || wb_rst_i)
+    !$isunknown(wb_clk_i);
+endproperty
+assert property (wb_clk_valid);
+parameter ARST_LVL = 1'b0;
+property wb_clk_toggle;
+    int count;
+    disable iff (arst_i !== ARST_LVL || wb_rst_i)
+    (1, count = 0) |=> (wb_clk_i != $past(wb_clk_i), count = 0)
+    or
+    (1, count++) |=> (count < 100);
+endproperty
+assert property (wb_clk_toggle);
+parameter ARST_LVL = 1'b0;
+property wb_clk_valid;
+    @(posedge wb_clk_i) disable iff (arst_i != ARST_LVL || wb_rst_i)
+    !$isunknown(wb_clk_i);
+endproperty
+assert property (wb_clk_valid);
+parameter ARST_LVL = 1'b0;
+property wb_clk_toggle;
+    @(wb_clk_i) 
+    (wb_clk_i |-> ##[1:100] !wb_clk_i) and 
+    (!wb_clk_i |-> ##[1:100] wb_clk_i);
+endproperty
+assert property (wb_clk_toggle);
+parameter ARST_LVL = 1'b0;
+property wb_clk_stable;
+    !$isunknown(wb_clk_i);
+endproperty
+assert property (wb_clk_stable);
+parameter ARST_LVL = 1'b0;
+parameter MAX_PERIOD = 32;
+property wb_clk_toggle;
+    @(posedge wb_clk_i) disable iff (arst_i != ARST_LVL || wb_rst_i)
+    (wb_clk_i |-> ##[1:MAX_PERIOD] !wb_clk_i) and
+    (!wb_clk_i |-> ##[1:MAX_PERIOD] wb_clk_i);
+endproperty
+
+assert property (wb_clk_toggle);

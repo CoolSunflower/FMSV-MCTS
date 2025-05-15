@@ -1,0 +1,93 @@
+<think>
+Okay, let's tackle this problem. The user provided a bunch of SystemVerilog assertions that have syntax errors, and they want me to fix them based on the given documentation. The main issues seem to be related to incorrect use of 'property' and 'assert' keywords, and possibly missing module definitions or incorrect structure.
+
+First, looking at the error messages, the key issues are syntax errors near 'property' and 'assert'. In SystemVerilog, properties and assertions need to be declared within a module, usually inside an interface or a checker. The original code might be missing the module wrapper, leading to these errors.
+
+The user also mentioned that the signals sda_padoen_o and scl_padoen_o are renamed to sda_pad_oe and scl_pad_oe in the Verilog code. However, the assertions provided are about wb_stb_i, so maybe those renames aren't directly relevant here, but I should keep that in mind if any assertions involve those signals.
+
+Looking at the assertions, they all start with 'parameter' followed by 'property', which is incorrect. The 'parameter' keyword is for declaring parameters, not for properties. Also, each property and assert should be properly structured within a module.
+
+Another issue is that the properties are declared but not wrapped correctly. In SystemVerilog, you can declare a property and then assert it. But the properties need to be inside a module, possibly within a generate block or directly in the module body.
+
+Also, some assertions use 'disable iff' which is correct, but the user mentioned not to use 'else' constructs, which I don't see here, so that's okay.
+
+The user wants the corrected assertions for wb_stb_i. Let's take each assertion one by one and fix the syntax.
+
+For example, the first assertion:
+
+Original:
+parameter
+property wb_stb_reset_inactive;
+assert property (@(posedge wb_clk_i) ($bits(wb_stb_i) == 1));
+
+This is incorrect because 'parameter' is not needed here. The property and assert should be inside a module. Also, $bits(wb_stb_i) == 1 is checking that wb_stb_i is a 1-bit signal, which might be redundant if it's already defined as such, but maybe it's a check for the signal's width.
+
+Corrected version would wrap this in a module, declare the property correctly, and then assert it.
+
+Similarly, other assertions have similar issues. They need to be encapsulated within a module, with proper declaration of properties and assertions.
+
+Another example:
+
+Original:
+property wb_stb_reset_inactive;
+assert property (@(posedge wb_clk_i) wb_stb_i |-> $past(wb_cyc_i, 1));
+
+Here, the property is declared but not used correctly in the assert. The correct way is to define the property and then assert it.
+
+So, putting it all together, the corrected assertions should be inside a module, with each property defined and then asserted. Also, the 'parameter' keyword is removed where unnecessary.
+
+Additionally, the user mentioned that the core uses a WISHBONE interface, and each access takes 2 clock cycles. Some assertions check for ##2 delays, which aligns with this.
+
+Also, the reset signals (arst_i and wb_rst_i) should be considered. The ARST_LVL parameter determines if the reset is active high or low. So, in assertions involving reset, we need to use (arst_i ^ ARST_LVL) to check if reset is active.
+
+Putting all this together, the corrected assertions should be structured within a module, with proper property definitions and assert statements. Also, any parameters like ARST_LVL should be declared as localparams if they're not already defined in the module.
+
+Finally, ensure that all properties are correctly formatted, with proper use of |->, |=>, and sequence operators. Also, disable iff clauses should be added where necessary to account for resets.
+</think>
+
+```systemverilog
+module i2c_master_sva;
+
+localparam ARST_LVL = 1'b0; // Set according to system configuration
+
+// Reset inactive check
+property wb_stb_reset_inactive;
+  @(posedge wb_clk_i) (wb_rst_i || (arst_i ^ ARST_LVL)) |-> !wb_stb_i;
+endproperty
+assert property (wb_stb_reset_inactive);
+
+// Strobe-Cycle connection
+property wb_stb_cyc_connectivity;
+  @(posedge wb_clk_i) wb_stb_i |-> wb_cyc_i;
+endproperty
+assert property (wb_stb_cyc_connectivity);
+
+// Acknowledge timing
+property wb_stb_ack_response;
+  @(posedge wb_clk_i) (wb_stb_i && wb_cyc_i) |-> ##2 wb_ack_o;
+endproperty
+assert property (wb_stb_ack_response);
+
+// Input stability during transfer
+property wb_input_stability;
+  @(posedge wb_clk_i) disable iff (wb_rst_i || (arst_i ^ ARST_LVL))
+  (wb_stb_i && wb_cyc_i) |-> 
+    ($stable(wb_adr_i) && $stable(wb_dat_i) && $stable(wb_we_i)) throughout ##[0:2] wb_ack_o;
+endproperty
+assert property (wb_input_stability);
+
+// Strobe retention until ACK
+property wb_stb_retention;
+  @(posedge wb_clk_i) disable iff (wb_rst_i || (arst_i ^ ARST_LVL))
+  (wb_stb_i && wb_cyc_i) |-> wb_stb_i throughout ##2 wb_ack_o;
+endproperty
+assert property (wb_stb_retention);
+
+// Single-bit check (if needed)
+property wb_stb_width;
+  @(posedge wb_clk_i) $bits(wb_stb_i) == 1;
+endproperty
+assert property (wb_stb_width);
+
+endmodule
+```

@@ -1,0 +1,112 @@
+<think>
+Okay, let's tackle generating the SVAs for arst_i. First, I need to understand the specifications thoroughly. The arst_i is an asynchronous reset, active based on ARST_LVL parameter. It's supposed to reset internal registers and logic asynchronously. Also, it's mutually exclusive with wb_rst_i.
+
+Starting with the basics: the width check. The signal is 1-bit, so an assertion to confirm that. Then, mutual exclusivity between arst_i and wb_rst_i. Since they shouldn't be active together, an assertion to check that.
+
+Next, the functionality. When arst_i is active, certain registers must reset. The control register (ctr) has EN bit (bit 7) which should be 0. The prescale register (prer) should be 0xFFFF. The status register (sr) should have all bits cleared, including Busy, AL, TIP, IF, and others. The command register (cr) is write-only but should reset to 0x00. Also, the transmit (txr) and receive (rxr) registers should reset to 0x00.
+
+Output signals: scl_padoen_o and sda_padoen_o are output enables. During reset, they should be 1 (inactive), so the core isn't driving the bus. The interrupt output wb_inta_o should be 0.
+
+I need to ensure that all these are checked when arst_i is active. Since SVAs are clock-based, using posedge wb_clk_i makes sense, but I should also consider immediate assertions for asynchronous checks. However, sticking to clock-based properties for consistency.
+
+Wait, the mutual exclusivity assertion was using posedge wb_clk_i before, but that might miss asynchronous overlaps. Changing it to an immediate assertion with assert final would cover all cases.
+
+Also, the previous answer had a typo in signal names (scl_padoen_oe instead of scl_padoen_o). Correcting that is crucial.
+
+Including checks for all bits in sr and ctr, including reserved ones, as the spec says they should read 0. Using $stable for reserved bits in ctr to ensure they don't change during reset.
+
+Adding a check for TIP (sr[3]) to ensure no ongoing transfers during reset. Also, ensuring that writes during reset are ignored with a property checking stability of registers.
+
+Finally, adding immediate assertions for tri-state controls and interrupt to capture their state asynchronously.
+
+Putting it all together, making sure each part of the spec is covered, signal names are correct, and assertions are as comprehensive as possible.
+</think>
+
+[REASONING]
+1. **Width Check**: arst_i must be 1-bit wide.
+2. **Mutual Exclusivity**: arst_i and wb_rst_i cannot be active simultaneously.
+3. **Register Resets**: 
+   - Control Register (ctr[7:0]) resets to 0x00 (EN=0, IEN=0, reserved bits stable)
+   - Prescale Register (prer) resets to 0xFFFF
+   - Command Register (cr) resets to 0x00
+   - Status Register (sr[7:0]) resets to 0x00 (all flags cleared)
+   - Transmit/Receive Registers (txr/rxr) reset to 0x00
+4. **Output Behavior**:
+   - Tri-state enables (scl_padoen_o/sda_padoen_o) disabled
+   - SCL/SDA pads default to high
+   - Interrupt (wb_inta_o) deasserted
+5. **Asynchronous Timing**: Immediate checks for critical signals
+
+[SVAs]
+```systemverilog
+// --------------------------
+// [Width] Checks
+// --------------------------
+assert property ($bits(arst_i) == 1);
+
+// --------------------------
+// [Connectivity] Checks
+// --------------------------
+// Verify mutual exclusivity with synchronous reset
+assert final (!(arst_i && wb_rst_i));
+
+// --------------------------
+// [Asynchronous Behavior] Checks
+// --------------------------
+// Immediate checks (work without clock)
+always_comb begin
+  if (arst_i == ARST_LVL) begin
+    assert_final(scl_padoen_o == 1'b1);
+    assert_final(sda_padoen_o == 1'b1);
+    assert_final(wb_inta_o == 1'b0);
+  end
+end
+
+// --------------------------
+// [Register Reset] Checks
+// --------------------------
+// Control register (EN=0, IEN=0, reserved stable)
+property arst_ctr_reset;
+  @(posedge wb_clk_i) (arst_i == ARST_LVL) |-> 
+    (ctr[7] == 1'b0) &&    // EN
+    (ctr[6] == 1'b0) &&    // IEN
+    $stable(ctr[5:0]);      // Reserved bits
+endproperty
+assert property (arst_ctr_reset);
+
+// Prescale register reset
+property arst_prer_reset;
+  @(posedge wb_clk_i) (arst_i == ARST_LVL) |-> (prer == 16'hFFFF);
+endproperty
+assert property (arst_prer_reset);
+
+// Command register reset
+property arst_cr_reset;
+  @(posedge wb_clk_i) (arst_i == ARST_LVL) |-> 
+    (cr[7:5] == 3'b0) &&   // STA/STO/RD
+    (cr[4:0] == 5'b0);     // WR/ACK/reserved/IACK
+endproperty
+assert property (arst_cr_reset);
+
+// Full status register reset
+property arst_sr_reset;
+  @(posedge wb_clk_i) (arst_i == ARST_LVL) |-> (sr == 8'h00);
+endproperty
+assert property (arst_sr_reset);
+
+// --------------------------
+// [Operational Integrity] Checks
+// --------------------------
+// No transfers during reset
+property arst_tip_clear;
+  @(posedge wb_clk_i) (arst_i == ARST_LVL) |-> (sr[3] == 1'b0); // TIP
+endproperty
+assert property (arst_tip_clear);
+
+// Ignore writes during reset
+property arst_write_ignore;
+  @(posedge wb_clk_i) (arst_i == ARST_LVL) && wb_we_i |=> 
+    $stable(prer) && $stable(txr) && $stable(cr);
+endproperty
+assert property (arst_write_ignore);
+```

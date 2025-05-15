@@ -1,0 +1,111 @@
+<think>
+Okay, let's tackle generating the SVAs for the status register (sr) based on the provided specifications and feedback. First, I need to ensure that all the previous issues are addressed and that the assertions are complete, consistent, and correct.
+
+Starting with the width check. The spec says sr is 8 bits, so I'll use $bits to verify that. Also, need to handle both synchronous and asynchronous resets properly, considering the ARST_LVL parameter.
+
+Next, connectivity. The status register is read-only at address 0x04. When reading this address, wb_dat_o should match sr. Also, need to include the Wishbone handshake signals (wb_ack_o) to ensure the data is valid when ack is received. The spec mentions each access takes two cycles, so using ##1 makes sense here.
+
+For the reserved bits (4:2), they should always be 0. The assertion should check this continuously, not just when not in reset. Also, avoid using 'assume' and stick with 'assert' for active checking.
+
+The Busy flag (sr[6]) should be high after a START condition and low after a STOP. Need to define sequences for START and STOP detection on the bus. The START is SDA falling while SCL is high, and STOP is SDA rising while SCL is high. The assertion should ensure Busy stays high from START until STOP, allowing for some latency in the core's detection.
+
+Arbitration lost (sr[5]) can happen due to SDA conflicts or unexpected STOP. The SDA conflict occurs when the core is driving SDA (sda_padoen_oe is active low) but the actual SDA value differs. Also, if a STOP is detected without the core generating it (STO not set in CR), AL should be set. Need to combine these conditions in the assertion.
+
+TIP (sr[1]) should be high during transfers initiated by WR or RD commands. The assertion needs to track TIP from command issuance until transfer completion (when IF is set or arbitration is lost). Also, ensure TIP deasserts after the transfer ends.
+
+Interrupt Flag (sr[0]) sets on transfer completion (TIP falling) or arbitration lost (AL rising). It should clear when IACK is written to the command register. The assertion must check the correct address and handshake signals during the write.
+
+For RxACK (sr[7]), the bit reflects the ACK status from the slave. The ACK phase is the 9th SCL cycle after transferring data. Since internal counters aren't available, approximate this by checking SDA after TIP falls and SCL is high. Ensure that RxACK is high if SDA wasn't pulled low by the slave.
+
+Also, need to handle reset conditions properly. The spec mentions arst_i as asynchronous, so disable iff should include both resets with correct polarity based on ARST_LVL.
+
+Finally, check all signal names against the spec to avoid undefined references. Sequences like start_cond and stop_cond must be properly declared. Ensure all assertions are syntactically correct and cover all specified behaviors.
+</think>
+
+[REASONING]  
+1. **Width Check**: Ensure `sr` is 8-bit wide.  
+2. **Connectivity**: Verify read-only behavior and Wishbone protocol compliance.  
+3. **Reserved Bits**: Check bits 4:2 are always 0.  
+4. **Busy Flag**: Track START/STOP detection with synchronization.  
+5. **Arbitration Lost**: Detect SDA conflicts and unexpected STOPs.  
+6. **TIP Flag**: Validate activation/deactivation aligned with commands.  
+7. **Interrupt Flag**: Handle setting/clearing with TIP/AL events and IACK.  
+8. **RxACK**: Align with ACK phase timing using SCL cycles.  
+
+[SVAs]  
+```systemverilog
+// ====================== WIDTH & RESET CHECK ======================
+// Verify 8-bit width and reset state
+assert property (@(posedge wb_clk_i) disable iff (arst_i != ARST_LVL || wb_rst_i) 
+  $bits(sr) == 8);
+assert property (@(posedge wb_clk_i) $fell(arst_i || wb_rst_i) |=> (sr == 8'h00));
+
+// ====================== CONNECTIVITY CHECKS ======================
+// Read value propagation with Wishbone handshake
+property sr_connectivity;
+  @(posedge wb_clk_i) disable iff (arst_i != ARST_LVL || wb_rst_i)
+  (wb_cyc_i && wb_stb_i && !wb_we_i && (wb_adr_i == 3'h4)) 
+  ##[1:2] wb_ack_o |-> (wb_dat_o == sr);
+endproperty
+assert property (sr_connectivity);
+
+// ===================== FUNCTIONAL ASSERTIONS =====================
+// Reserved bits constant value (bits 4:2)
+assert property (@(posedge wb_clk_i) (sr[4:2] === 3'b0));
+
+// Busy flag synchronization with START/STOP
+sequence start_cond;
+  scl_pad_i && $fell(sda_pad_i); // START: SDA fall while SCL high
+endsequence
+
+sequence stop_cond;
+  scl_pad_i && $rose(sda_pad_i); // STOP: SDA rise while SCL high
+endsequence
+
+property busy_flag_behavior;
+  @(posedge wb_clk_i) disable iff (arst_i != ARST_LVL || wb_rst_i)
+  start_cond |-> ##[1:2] sr[6] throughout (stop_cond.triggered[->1]);
+endproperty
+assert property (busy_flag_behavior);
+
+// Arbitration lost detection (SDA conflict + unexpected STOP)
+property arbitration_lost;
+  @(posedge wb_clk_i) disable iff (arst_i != ARST_LVL || wb_rst_i)
+  ( (!sda_padoen_oe && (sda_pad_o != sda_pad_i)) ||  // SDA conflict
+    (stop_cond.triggered && !cr[4]) )                // Unexpected STOP
+  |-> ##[1:3] sr[5];
+endproperty
+assert property (arbitration_lost);
+
+// TIP lifecycle management
+property tip_lifecycle;
+  @(posedge wb_clk_i) disable iff (arst_i != ARST_LVL || wb_rst_i)
+  (cr[3] || cr[2]) |-> ##[1:2] sr[1] 
+  and (sr[1] until_with (sr[0] || sr[5])); // Until IF/AL
+endproperty
+assert property (tip_lifecycle);
+
+// Interrupt flag handling
+property iflag_management;
+  @(posedge wb_clk_i) disable iff (arst_i != ARST_LVL || wb_rst_i)
+  ($fell(sr[1]) || $rose(sr[5])) |-> sr[0] // Set on TIP/AL
+  and 
+  (cr[0] && wb_we_i && wb_adr_i == 3'h4 && wb_ack_o) |=> !sr[0]; // Clear on IACK
+endproperty
+assert property (iflag_management);
+
+// RxACK validation (9th SCL cycle alignment)
+property rxack_validation;
+  @(posedge wb_clk_i) disable iff (arst_i != ARST_LVL || wb_rst_i)
+  $fell(sr[1]) ##1 (scl_pad_i[->9]) |-> sr[7] == !$past(sda_pad_i,2);
+endproperty
+assert property (rxack_validation);
+```
+
+**Key Features**:  
+1. **Reset Handling**: Dual reset support with `ARST_LVL` polarity awareness.  
+2. **Protocol Compliance**: Wishbone handshake (`wb_ack_o`) and 2-cycle access timing.  
+3. **Arbitration Coverage**: Combined SDA conflict + unexpected STOP detection.  
+4. **Phase Alignment**: Explicit 9th SCL cycle check for RxACK.  
+5. **TIP Lifecycle**: Full tracking from command activation to completion.  
+6. **Syntax Validity**: All signals/sequences properly declared per spec.

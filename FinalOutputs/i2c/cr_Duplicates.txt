@@ -1,0 +1,173 @@
+assert property (@(posedge wb_clk_i) ($bits(cr) == 8));
+
+property ReservedBitsZero;
+  @(posedge wb_clk_i) (wb_adr_i == 4'h4 && wb_we_i && wb_cyc_i && wb_stb_i) |-> (wb_dat_i[2:1] == 2'b00);
+endproperty
+assert property (ReservedBitsZero);
+
+property IACK_ClearsInterrupt;
+  @(posedge wb_clk_i) (wb_adr_i == 4'h4 && wb_we_i && wb_cyc_i && wb_stb_i && wb_dat_i[0] && wb_ack_o) |-> (sr[0] == 0);
+endproperty
+assert property (IACK_ClearsInterrupt);
+
+property CR_ResetValue_Async;
+  @(posedge wb_clk_i) (arst_i == ARST_LVL) |-> (cr == 8'h00);
+endproperty
+assert property (CR_ResetValue_Async);
+
+property CR_ResetValue_Sync;
+  @(posedge wb_clk_i) wb_rst_i |=> (cr == 8'h00);
+endproperty
+assert property (CR_ResetValue_Sync);
+
+property ACK_ValidDuringRead;
+  @(posedge wb_clk_i) (cr[3] && !cr[5]) |-> (sr[3] == 1); // ACK set without RD
+endproperty
+assert property (ACK_ValidDuringRead);
+
+property ReservedBitsConnectivity;
+  @(posedge wb_clk_i) 
+  (wb_adr_i == 4'h4 && wb_we_i && wb_cyc_i && wb_stb_i) |=> 
+  (cr[2:1] == 2'b00);
+endproperty
+assert property (ReservedBitsConnectivity);
+
+property CommandAutoClear;
+  @(posedge wb_clk_i)
+  (wb_adr_i == 4'h4 && wb_we_i && wb_cyc_i && wb_stb_i) |=> 
+  (cr[7:4] == 4'b0 && cr[0] == 0); // STA,STO,RD,WR,IACK cleared
+endproperty
+assert property (CommandAutoClear);
+
+property InterruptAcknowledge;
+  @(posedge wb_clk_i)
+  (wb_adr_i == 4'h4 && wb_we_i && wb_cyc_i && wb_stb_i && wb_dat_i[0]) 
+  |-> ##[1:4] (sr[0] == 0); // IF cleared within 1-4 cycles
+endproperty
+assert property (InterruptAcknowledge);
+
+property AsyncResetValue;
+    @(posedge wb_clk_i) 
+    $fell(arst_i) |-> (cr == 8'h00);
+  endproperty
+  assert property (AsyncResetValue);
+
+property AsyncResetValue;
+    @(posedge wb_clk_i) 
+    $rose(arst_i) |-> (cr == 8'h00);
+  endproperty
+  assert property (AsyncResetValue);
+
+property SyncResetValue;
+  @(posedge wb_clk_i) 
+  wb_rst_i |=> (cr == 8'h00);
+endproperty
+assert property (SyncResetValue);
+
+property ReservedBitsZero;
+  @(posedge wb_clk_i) 
+  (wb_adr_i == 4'h4 && wb_we_i && wb_cyc_i && wb_stb_i) |-> (wb_dat_i[2:1] == 2'b00);
+endproperty
+assert property (ReservedBitsZero);
+
+property NoRD_WR_Conflict;
+  @(posedge wb_clk_i) 
+  (wb_adr_i == 4'h4 && wb_we_i && wb_cyc_i && wb_stb_i) |-> !(wb_dat_i[5] && wb_dat_i[4]);
+endproperty
+assert property (NoRD_WR_Conflict);
+
+property CommandBitsAutoClear;
+  @(posedge wb_clk_i) 
+  (wb_adr_i == 4'h4 && wb_we_i && wb_cyc_i && wb_stb_i) |=> 
+  (cr[7:4] == 4'b0 && cr[0] == 0);
+endproperty
+assert property (CommandBitsAutoClear);
+
+property IACK_ClearsInterrupt;
+  @(posedge wb_clk_i) 
+  (wb_adr_i == 4'h4 && wb_we_i && wb_cyc_i && wb_stb_i && wb_dat_i[0]) |-> 
+  ##[1:2] (sr[0] == 0);
+endproperty
+assert property (IACK_ClearsInterrupt);
+
+property ACK_StableDuringRead;
+  @(posedge wb_clk_i) 
+  (cr[5] && $past(cr[5])) |-> $stable(cr[3]);
+endproperty
+assert property (ACK_StableDuringRead);
+
+property CR_ResetValue_Async;
+  @(posedge wb_clk_i) 
+  (ARST_LVL == 0 && $fell(arst_i)) || (ARST_LVL == 1 && $rose(arst_i)) |-> (cr == 8'h00);
+endproperty
+assert property (CR_ResetValue_Async);
+
+property CR_ResetValue_Sync;
+  @(posedge wb_clk_i) 
+  wb_rst_i |=> (cr == 8'h00);
+endproperty
+assert property (CR_ResetValue_Sync);
+
+property ReservedBitsZeroWrite;
+  @(posedge wb_clk_i) 
+  (wb_adr_i == 4'h4 && wb_we_i && wb_cyc_i && wb_stb_i) |-> (wb_dat_i[2:1] == 2'b00);
+endproperty
+assert property (ReservedBitsZeroWrite);
+
+property ReservedBitsZeroRead;
+  @(posedge wb_clk_i) 
+  (wb_adr_i == 4'h4 && !wb_we_i && wb_cyc_i && wb_stb_i) |-> (wb_dat_o[2:1] == 2'b00);
+endproperty
+assert property (ReservedBitsZeroRead);
+
+property NoSTA_STO_Conflict;
+  @(posedge wb_clk_i) (wb_adr_i == 4'h4 && wb_we_i && wb_cyc_i && wb_stb_i) |-> !(wb_dat_i[7] && wb_dat_i[6]);
+endproperty
+assert property (NoSTA_STO_Conflict);
+
+property NoRD_WR_Conflict;
+  @(posedge wb_clk_i) (wb_adr_i == 4'h4 && wb_we_i && wb_cyc_i && wb_stb_i) |-> !(wb_dat_i[5] && wb_dat_i[4]);
+endproperty
+assert property (NoRD_WR_Conflict);
+
+property STA_AutoClear;
+  @(posedge wb_clk_i) (wb_adr_i == 4'h4 && wb_we_i && wb_cyc_i && wb_stb_i && wb_dat_i[7]) |=> (cr[7] == 0);
+endproperty
+assert property (STA_AutoClear);
+
+property STO_AutoClear;
+  @(posedge wb_clk_i) (wb_adr_i == 4'h4 && wb_we_i && wb_cyc_i && wb_stb_i && wb_dat_i[6]) |=> (cr[6] == 0);
+endproperty
+assert property (STO_AutoClear);
+
+property RD_AutoClear;
+  @(posedge wb_clk_i) (wb_adr_i == 4'h4 && wb_we_i && wb_cyc_i && wb_stb_i && wb_dat_i[5]) |=> (cr[5] == 0);
+endproperty
+assert property (RD_AutoClear);
+
+property WR_AutoClear;
+  @(posedge wb_clk_i) (wb_adr_i == 4'h4 && wb_we_i && wb_cyc_i && wb_stb_i && wb_dat_i[4]) |=> (cr[4] == 0);
+endproperty
+assert property (WR_AutoClear);
+
+property IACK_AutoClear;
+  @(posedge wb_clk_i) (wb_adr_i == 4'h4 && wb_we_i && wb_cyc_i && wb_stb_i && wb_dat_i[0]) |=> (cr[0] == 0);
+endproperty
+assert property (IACK_AutoClear);
+
+property IACK_ClearsInterrupt;
+  @(posedge wb_clk_i) (wb_adr_i == 4'h4 && wb_we_i && wb_cyc_i && wb_stb_i && wb_dat_i[0]) |=> (sr[0] == 0);
+endproperty
+assert property (IACK_ClearsInterrupt);
+
+property CR_ResetValue_Async;
+  @(posedge wb_clk_i) $fell(arst_i) |-> (cr == 8'h00);
+endproperty
+assert property (CR_ResetValue_Async);
+
+localparam CR_WRITABLE_BITS = 8'hB1;
+assert property (@(posedge wb_clk_i) ($bits(ad) == 32));
+
+localparam CR_WRITABLE_BITS = 8'hB1;
+assert property (@(posedge wb_clk_i) ($bits(c_be) == 4));
+

@@ -1,0 +1,26 @@
+assert property (@(posedge clk_i) disable iff (!rst_ni) ($bits(active) == 1));
+
+property active_inactive_mtime_stable;
+  @(posedge clk_i) disable iff (!rst_ni)
+  !active |-> (mtime_d == mtime);
+endproperty
+assert property (active_inactive_mtime_stable);
+
+property active_inactive_no_tick;
+  @(posedge clk_i) disable iff (!rst_ni)
+  !active |-> !tick;
+endproperty
+assert property (active_inactive_no_tick);
+
+property active_inactive_no_intr;
+  @(posedge clk_i) disable iff (!rst_ni)
+  !active |-> !intr[0];
+endproperty
+assert property (active_inactive_no_intr);
+
+property active_high_operations_enabled;
+  @(posedge clk_i) disable iff (!rst_ni)
+  active |-> (mtime_d == (tick ? mtime + step : mtime));
+endproperty
+assert property (active_high_operations_enabled);
+

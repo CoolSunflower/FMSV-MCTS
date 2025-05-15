@@ -1,0 +1,65 @@
+<think>
+Okay, let's tackle generating the SVAs for the 'active' signal. First, I need to understand the role of 'active' in the timer module. The spec says it's a 1-bit input that activates or deactivates the module. When active is high, the module works; when low, everything pauses.
+
+Starting with the basics: check the width of 'active' is indeed 1-bit. That's straightforward with a simple assertion using $bits.
+
+Next, connectivity. The 'active' signal affects the tick generator, mtime counter, mtimecmp comparator, and intr interrupt. So when active is low, these components should stop. For example, the tick shouldn't generate, mtime shouldn't increment, and interrupts shouldn't fire. 
+
+For the tick, if active is low, the tick should be 0. That's a direct implication. For mtime, since mtime_d is the next value of mtime, when active is low, mtime_d should equal mtime because the counter isn't updating. Similarly, the interrupt signal intr should be 0 when active is low. Since the spec mentions it's fixed to one hart, checking intr[0] makes sense.
+
+Also, considering the reset. The reset signal rst_ni is active low, so all assertions should disable when rst_ni is low. Using disable iff (!rst_ni) in the properties handles this.
+
+Now, functionality when active is high. The module should operate normally. But how to check that? Well, when active is high, mtime_d should update based on the tick and step value. If there's a tick, mtime_d should be mtime + step; otherwise, it stays the same. So an assertion that checks this relationship when active is high covers the functionality.
+
+Putting it all together: width check, three connectivity checks for tick, mtime_d, and intr when inactive, and a functionality check when active is high. Each assertion is clocked on posedge clk_i and disables during reset. That should cover all necessary cases for the 'active' signal.
+</think>
+
+[REASONING]  
+1. **Width Verification**: Mandatory check for 1-bit signal integrity  
+2. **Inactive State Behavior**:  
+   - mtime stability: Counter must freeze when inactive  
+   - Tick suppression: No periodic pulses generated  
+   - Interrupt masking: Prevent false positive interrupts  
+3. **Active State Functionality**:  
+   - Validate proper increment logic when enabled  
+   - Ensure step/prescaler interaction only occurs when active  
+4. **Reset Domain**:  
+   - All checks disabled during reset condition  
+   - Asynchronous reset handling alignment  
+5. **Hart Configuration**:  
+   - Explicit intr[0] index for single-hart implementation  
+   - Scalable structure for multi-hart future expansion  
+
+[SVAs]  
+```systemverilog
+// Formal width check
+assert property (@(posedge clk_i) disable iff (!rst_ni) ($bits(active) == 1));
+
+// Inactive state stability checks
+property active_inactive_operations_halted;
+  @(posedge clk_i) disable iff (!rst_ni)
+  !active |-> (mtime_d == mtime) and !tick and !intr[0];
+endproperty
+assert property (active_inactive_operations_halted);
+
+// Active state functionality check
+property active_operational_behavior;
+  @(posedge clk_i) disable iff (!rst_ni)
+  active |-> (mtime_d == (tick ? (mtime + step) : mtime));
+endproperty
+assert property (active_operational_behavior);
+
+// Activation persistence check
+property active_stable_operations;
+  @(posedge clk_i) disable iff (!rst_ni)
+  $rose(active) |-> strong(##[1:$] (tick || intr[0])) until !active;
+endproperty
+assert property (active_stable_operations);
+```
+
+**Key Assertion Features**:  
+1. Combined inactive state checks in single property  
+2. Explicit mathematical relationship for active state  
+3. Temporal check for sustained functionality after activation  
+4. Reset-aware checking architecture  
+5. Bit-width verification as fundamental safety check

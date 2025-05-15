@@ -1,0 +1,76 @@
+<think>
+Okay, let's tackle generating the SVAs for the rst_ni signal. First, I need to make sure I understand all the specifications and previous feedback. The rst_ni is an active-low asynchronous reset that affects several components like the tick generator, mtime, mtimecmp, and interrupt logic. 
+
+Starting with the width check: rst_ni is 1-bit, so I'll use $bits to verify that. That's straightforward.
+
+Next, connectivity. The reset should force intr to 0, mtime_d (since mtime is an input, the internal mtime_d should reset to 0), and tick to 0. Previous answers had mtime instead of mtime_d, which was a mistake because mtime is an input. So correcting that is crucial.
+
+For functionality, the reset is asynchronous, so I need to check that when rst_ni falls, the signals reset immediately. Since SVAs are clock-based, I'll check at the next clock edge. Also, I need to ensure that during the entire reset period, these signals stay in their reset state. Using the throughout operator makes sense here. 
+
+Another point is the interaction with the active signal. Even if the module is active, the reset should override it. So adding an assertion that checks reset's priority over active is necessary. 
+
+The prescaler reset might not have a direct signal, but the tick output staying 0 during reset indirectly confirms the prescaler is reset. Adding a stability check for tick over a few cycles could help ensure the tick generator isn't producing ticks during reset.
+
+I also need to avoid any checks on mtimecmp since it's an input, as per the spec. Previous critiques pointed out that mistake, so I'll make sure not to include it.
+
+Putting it all together, the assertions should cover width, connectivity with corrected signals, asynchronous impact, reset persistence, override of active, and prescaler stability. This should cover all aspects without introducing new signals or making incorrect assumptions.
+</think>
+
+[REASONING]  
+1. **Width Check**: Mandatory verification of 1-bit signal width.  
+2. **Connectivity**:  
+   - Reset must clear interrupt output (`intr`)  
+   - Reset must initialize next mtime value (`mtime_d`)  
+   - Reset must disable tick generation  
+3. **Functionality**:  
+   - Asynchronous reset must override all operations  
+   - Reset state persistence until deassertion  
+   - Reset priority over `active` signal  
+   - Prescaler stability during reset  
+
+[SVAs]  
+```systemverilog
+// Width assertion
+assert property (@(posedge clk_i) ($bits(rst_ni) == 1));
+
+// Connectivity assertions
+property rst_ni_intr_connectivity;
+  @(posedge clk_i) !rst_ni |-> (intr == 0);
+endproperty
+assert property (rst_ni_intr_connectivity);
+
+property rst_ni_mtime_d_connectivity;
+  @(posedge clk_i) !rst_ni |-> (mtime_d == 64'h0);
+endproperty
+assert property (rst_ni_mtime_d_connectivity);
+
+property rst_ni_tick_connectivity;
+  @(posedge clk_i) !rst_ni |-> !tick;
+endproperty
+assert property (rst_ni_tick_connectivity);
+
+// Functionality assertions
+property rst_ni_async_impact;
+  @(posedge clk_i) $fell(rst_ni) |-> (mtime_d == 64'h0) && (intr == 0);
+endproperty
+assert property (rst_ni_async_impact);
+
+property rst_ni_persistence;
+  @(posedge clk_i) 
+  !rst_ni throughout (##[0:$] $rose(rst_ni)) |->
+    (mtime_d == 64'h0) && (intr == 0) && (!tick);
+endproperty
+assert property (rst_ni_persistence);
+
+property rst_ni_priority_over_active;
+  @(posedge clk_i) 
+  (!rst_ni && active) |-> (mtime_d == 64'h0) && (!tick);
+endproperty
+assert property (rst_ni_priority_over_active);
+
+property rst_ni_prescaler_stability;
+  @(posedge clk_i) 
+  !rst_ni |=> $stable(tick)[*3]; // Verify no tick generation for 3 cycles
+endproperty
+assert property (rst_ni_prescaler_stability);
+```

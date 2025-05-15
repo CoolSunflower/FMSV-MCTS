@@ -1,0 +1,138 @@
+assert property (@(posedge wb_clk_i) disable iff (wb_rst_i) $bits(sr) == 8);
+
+assert property (@(posedge wb_clk_i) $bits(sr) == 8);
+
+assert property (@(posedge wb_clk_i) disable iff (wb_rst_i || arst_i) (sr[4:2] == 3'b0));
+
+assert property (@(posedge wb_clk_i) $fell(arst_i) |=> (sr == 8'h00));
+
+assert property (@(posedge wb_clk_i) (sr[4:2] == 3'b0));
+
+property sr_connectivity;
+  @(posedge wb_clk_i) disable iff (wb_rst_i)
+  (wb_cyc_i && wb_stb_i && !wb_we_i && (wb_adr_i == 3'h4)) 
+  ##1 wb_ack_o |-> wb_dat_o == sr;
+endproperty
+assert property (sr_connectivity);
+
+property tip_lifecycle;
+  @(posedge wb_clk_i) disable iff (wb_rst_i)
+  (cr[3] || cr[2]) |=> sr[1] until_with $fell(sr[1]);
+endproperty
+assert property (tip_lifecycle);
+
+property iflag_comprehensive;
+  @(posedge wb_clk_i) disable iff (wb_rst_i)
+  ($fell(sr[1]) or $rose(sr[5])) |-> sr[0];
+endproperty
+assert property (iflag_comprehensive);
+
+property sr_connectivity;
+  @(posedge wb_clk_i) disable iff (wb_rst_i || arst_i)
+  (wb_cyc_i && wb_stb_i && !wb_we_i && (wb_adr_i == 3'h4)) 
+  ##1 wb_ack_o |-> wb_dat_o == sr;
+endproperty
+assert property (sr_connectivity);
+
+property tip_lifecycle;
+  @(posedge wb_clk_i) disable iff (wb_rst_i || arst_i)
+  (cr[3] || cr[2]) |=> sr[1] throughout (cr[3] || cr[2])[->1] 
+  ##0 $fell(sr[1]);
+endproperty
+assert property (tip_lifecycle);
+
+property iflag_comprehensive;
+  @(posedge wb_clk_i) disable iff (wb_rst_i || arst_i)
+  ($fell(sr[1]) or $rose(sr[5])) |-> sr[0] 
+  until (wb_we_i && (wb_adr_i == 3'h4) && cr[0]);
+endproperty
+assert property (iflag_comprehensive);
+
+property rxack_phase_aligned;
+  @(posedge wb_clk_i) disable iff (wb_rst_i || arst_i)
+  (sr[1] && cr[3]) |-> 
+  ##8 (scl_pad_i && !sr[1]) |-> $past(sda_pad_i,1) == !sr[7];
+endproperty
+assert property (rxack_phase_aligned);
+
+property sr_connectivity;
+  @(posedge wb_clk_i) disable iff (wb_rst_i)
+  (wb_cyc_i && wb_stb_i && !wb_we_i && (wb_adr_i == 3'h4)) |-> (wb_dat_o == sr);
+endproperty
+assert property (sr_connectivity);
+
+property tip_lifecycle;
+  @(posedge wb_clk_i) disable iff (wb_rst_i)
+  (cr[3] || cr[2]) |-> ##[1:2] sr[1] and 
+  (sr[1] until_with (sr[0] || sr[5]));
+endproperty
+assert property (tip_lifecycle);
+
+property iflag_management;
+  @(posedge wb_clk_i) disable iff (wb_rst_i)
+  ($fell(sr[1]) || $rose(sr[5])) |-> sr[0] and
+  (cr[0] && wb_we_i && wb_adr_i == 3'h4) |=> !sr[0];
+endproperty
+assert property (iflag_management);
+
+property rxack_validation;
+  @(posedge wb_clk_i) disable iff (wb_rst_i)
+  $fell(sr[1]) ##1 scl_pad_i[->1] |-> sr[7] == $past(sda_pad_i, 2);
+endproperty
+assert property (rxack_validation);
+
+property tip_active;
+  @(posedge wb_clk_i) disable iff (wb_rst_i)
+  (cr[3] || cr[2]) |=> sr[1];
+endproperty
+assert property (tip_active);
+
+property iflag_set;
+  @(posedge wb_clk_i) disable iff (wb_rst_i)
+  ($fell(sr[1]) || $rose(sr[5])) |-> sr[0];
+endproperty
+assert property (iflag_set);
+
+property iflag_clear;
+  @(posedge wb_clk_i) disable iff (wb_rst_i)
+  (cr[0] && wb_we_i && (wb_adr_i == 3'h4)) |=> !sr[0];
+endproperty
+assert property (iflag_clear);
+
+property rxack_nack;
+  @(posedge wb_clk_i) disable iff (wb_rst_i)
+  $fell(sr[1]) |-> (sr[7] == !sda_pad_i); // Simplified check
+endproperty
+assert property (rxack_nack);
+
+property busy_flag_sync;
+  @(posedge wb_clk_i) disable iff (wb_rst_i || arst_i)
+  (cr[7] && !sr[6]) |-> ##[1:5] sr[6] throughout (sr[6] until (sr[4] && cr[4]));
+endproperty
+assert property (busy_flag_sync);
+
+property arbitration_lost_correct;
+  @(posedge wb_clk_i) disable iff (wb_rst_i || arst_i)
+  (!sda_pad_oe && (sda_pad_o != sda_pad_i)) |-> ##[1:3] sr[5];
+endproperty
+assert property (arbitration_lost_correct);
+
+property rxack_phase_aligned;
+  @(posedge wb_clk_i) disable iff (wb_rst_i || arst_i)
+  (sr[1] && cr[3]) |-> $past(sda_pad_i,1) == !sr[7];
+endproperty
+assert property (rxack_phase_aligned);
+
+property arbitration_lost_stop_cond;
+  @(posedge wb_clk_i) disable iff (wb_rst_i || arst_i)
+  (!cr[4] && scl_pad_i && !scl_pad_oe && sda_pad_i && !sda_pad_oe)
+  |-> ##[1:3] sr[5];
+endproperty
+assert property (arbitration_lost_stop_cond);
+
+property busy_behavior;
+  @(posedge wb_clk_i) disable iff (wb_rst_i || arst_i)
+  (cr[7] && !sr[6]) |-> ##[1] sr[6] throughout (sr[6] until (sr[4] && cr[4]));
+endproperty
+assert property (busy_behavior);
+

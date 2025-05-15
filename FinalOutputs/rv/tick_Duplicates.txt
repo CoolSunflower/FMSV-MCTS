@@ -1,0 +1,110 @@
+assert property (@(posedge clk_i) $bits(tick) == 1);
+
+property tick_async_reset;
+  @(posedge clk_i) $fell(rst_ni) |-> !tick;
+endproperty
+assert property (tick_async_reset);
+
+property tick_inactive;
+  @(posedge clk_i) !active |-> !tick;
+endproperty
+assert property (tick_inactive);
+
+property tick_periodicity;
+  int last_prescaler;
+  @(posedge clk_i) disable iff (!rst_ni || !active)
+  ($rose(tick), last_prescaler = $past(prescaler)) |-> 
+  ##1 (!tick throughout (last_prescaler)) ##1 tick;
+endproperty
+assert property (tick_periodicity);
+
+property tick_single_pulse_dynamic;
+  @(posedge clk_i) disable iff (!rst_ni || !active)
+  tick && $past(prescaler) != 0 |=> !tick;
+endproperty
+assert property (tick_single_pulse_dynamic);
+
+property mtime_update_reset_safe;
+  @(posedge clk_i)
+  tick && rst_ni |-> mtime_d == mtime + step;
+endproperty
+assert property (mtime_update_reset_safe);
+
+property prescaler_max_edge_case;
+  @(posedge clk_i) disable iff (!rst_ni || !active)
+  (prescaler == 4095) && tick |-> ##4096 tick;
+endproperty
+assert property (prescaler_max_edge_case);
+
+property tick_reset_inactive;
+  @(posedge clk_i) disable iff (!rst_ni || !active) 
+  1 |-> !tick;
+endproperty
+assert property (tick_reset_inactive);
+
+property tick_prescaler_zero;
+  @(posedge clk_i) disable iff (!rst_ni || !active)
+  (prescaler == 0) |-> tick;
+endproperty
+assert property (tick_prescaler_zero);
+
+property tick_single_pulse;
+  @(posedge clk_i) disable iff (!rst_ni || !active)
+  tick |=> (prescaler == 0) || !tick;
+endproperty
+assert property (tick_single_pulse);
+
+property mtime_update_on_tick;
+  @(posedge clk_i) disable iff (!rst_ni)
+  tick |-> mtime_d == mtime + step;
+endproperty
+assert property (mtime_update_on_tick);
+
+property tick_reset_inactive;
+  @(posedge clk_i) disable iff (!rst_ni || !active)
+  !rst_ni || !active |-> !tick;
+endproperty
+assert property (tick_reset_inactive);
+
+property tick_high_when_prescaler_zero;
+  @(posedge clk_i) disable iff (!rst_ni || !active)
+  (prescaler == 0) |-> tick;
+endproperty
+assert property (tick_high_when_prescaler_zero);
+
+property mtime_update_on_tick;
+  @(posedge clk_i) disable iff (!rst_ni || !active)
+  tick |=> (mtime_d == $past(mtime) + step);
+endproperty
+assert property (mtime_update_on_tick);
+
+property mtime_stable_no_tick;
+  @(posedge clk_i) disable iff (!rst_ni || !active)
+  !tick |-> mtime_d == mtime;
+endproperty
+assert property (mtime_stable_no_tick);
+
+property tick_high_when_prescaler_zero;
+  @(posedge clk_i) disable iff (!rst_ni || !active)
+  (prescaler == 0) |-> ##1 tick;
+endproperty
+assert property (tick_high_when_prescaler_zero);
+
+property tick_reset_inactive;
+  @(posedge clk_i) !rst_ni || !active |-> !tick;
+endproperty
+assert property (tick_reset_inactive);
+
+property mtime_stable_no_tick;
+  @(posedge clk_i) disable iff (!rst_ni)
+  !tick |-> mtime_d == mtime;
+endproperty
+assert property (mtime_stable_no_tick);
+
+property tick_periodicity;
+  int cnt;
+  @(posedge clk_i) disable iff (!rst_ni || !active)
+  ($rose(tick), cnt=0) ##0 (1, cnt++)[*0:$] ##1 $rose(tick) |-> cnt == prescaler + 1;
+endproperty
+assert property (tick_periodicity);
+

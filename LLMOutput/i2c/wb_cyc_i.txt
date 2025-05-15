@@ -1,0 +1,97 @@
+<think>
+Okay, let's tackle generating the SVAs for wb_cyc_i. First, I need to understand the signal's role in the system. From the description, wb_cyc_i is a 1-bit input that indicates a valid bus cycle on the WISHBONE interface. It works with wb_stb_i to validate transactions. The core processes transactions only when wb_cyc_i is active.
+
+Starting with the basics: the width check. Since it's a 1-bit signal, I should assert that. But wait, the user mentioned that using $bits in SVA isn't correct because it's a compile-time check. So maybe I should skip that or handle it differently. But the spec says it's 1-bit, so maybe include it as a static check but note that it's not runtime.
+
+Next, connectivity. The key here is that wb_stb_i can't be active without wb_cyc_i. So whenever wb_stb_i is high, wb_cyc_i must also be high. Also, when wb_cyc_i is low, the core shouldn't acknowledge, so wb_ack_o should be low in that case.
+
+Functionality-wise, the WISHBONE spec says each access takes two clock cycles. So once wb_cyc_i and wb_stb_i are high, wb_ack_o should come exactly two cycles later. Also, during those two cycles, wb_cyc_i must remain high. Additionally, the address and data inputs (wb_adr_i, wb_dat_i, wb_we_i) should remain stable throughout the transaction until ack is received.
+
+Another point is that during reset (wb_rst_i), the core shouldn't process transactions, so wb_ack_o should be low regardless of wb_cyc_i. Also, after a transaction (when ack is high), wb_cyc_i can either stay high for another transaction or go low, but it shouldn't toggle during the transaction.
+
+Wait, the user's previous answer had some issues. For example, using ##[1:2] instead of ##2 for the exact two cycles. Also, the stability checks were using ##[1:2] $stable, which isn't correct because it should be stable throughout the entire transaction, not just one or two cycles. So I need to use 'throughout' to cover the entire duration until ack.
+
+Also, the post-acknowledge behavior wasn't checked. The user added an assertion to check if wb_cyc_i deasserts or stays high after ack. That's important for pipelined transactions.
+
+Putting it all together, the SVAs should include:
+
+1. Connectivity: wb_stb_i implies wb_cyc_i.
+2. Connectivity: No ack when cyc is low.
+3. Functionality: Exact two-cycle transaction timing.
+4. Input stability throughout the transaction.
+5. No mid-transaction toggle of wb_cyc_i.
+6. Post-acknowledge behavior check.
+7. Reset handling to ensure ack is low.
+
+I need to make sure all assertions have disable iff (wb_rst_i) to ignore during reset. Also, use 'throughout' for stability and exact cycle counts where necessary.
+</think>
+
+[REASONING]
+1. **Width Check**: Formal verification of 1-bit width (static check, not runtime).
+2. **Connectivity**:
+   - `wb_stb_i` requires `wb_cyc_i` (WISHBONE rule).
+   - No acknowledgments when cycle inactive.
+3. **Functionality**:
+   - Strict 2-cycle transaction timing per spec.
+   - Input stability throughout entire transaction.
+   - No mid-transaction glitches on `wb_cyc_i`.
+   - Valid post-transaction behavior (deassertion or continuation).
+   - Reset suppression of acknowledgments.
+4. **Edge Cases**:
+   - Back-to-back transaction gap compliance.
+   - Reset state validation.
+
+[SVAs]
+```systemverilog
+// Connectivity: wb_stb_i only when wb_cyc_i is high
+assert property (@(posedge wb_clk_i) disable iff (wb_rst_i)
+    wb_stb_i |-> wb_cyc_i);
+
+// No ack when cycle inactive
+assert property (@(posedge wb_clk_i) disable iff (wb_rst_i)
+    !wb_cyc_i |-> !wb_ack_o);
+
+// Exact 2-cycle transaction timing
+property transaction_timing;
+    @(posedge wb_clk_i) disable iff (wb_rst_i)
+    (wb_cyc_i && wb_stb_i) |-> ##2 wb_ack_o;
+endproperty
+assert property (transaction_timing);
+
+// Address stability throughout transaction
+property addr_stability;
+    @(posedge wb_clk_i) disable iff (wb_rst_i)
+    (wb_cyc_i && wb_stb_i) |-> $stable(wb_adr_i) until_with wb_ack_o;
+endproperty
+assert property (addr_stability);
+
+// Data input stability throughout transaction
+property data_stability;
+    @(posedge wb_clk_i) disable iff (wb_rst_i)
+    (wb_cyc_i && wb_stb_i) |-> $stable(wb_dat_i) until_with wb_ack_o;
+endproperty
+assert property (data_stability);
+
+// Write enable stability throughout transaction
+property we_stability;
+    @(posedge wb_clk_i) disable iff (wb_rst_i)
+    (wb_cyc_i && wb_stb_i) |-> $stable(wb_we_i) until_with wb_ack_o;
+endproperty
+assert property (we_stability);
+
+// No mid-transaction toggle of wb_cyc_i
+assert property (@(posedge wb_clk_i) disable iff (wb_rst_i)
+    wb_cyc_i && !wb_ack_o |=> wb_cyc_i);
+
+// Valid post-acknowledge behavior
+assert property (@(posedge wb_clk_i) disable iff (wb_rst_i)
+    $fell(wb_ack_o) |-> ##[0:1] ($fell(wb_cyc_i) || $stable(wb_cyc_i)));
+
+// Reset forces ack low and cyc inactive
+assert property (@(posedge wb_clk_i)
+    wb_rst_i |-> !wb_ack_o && !wb_cyc_i);
+
+// Inter-transaction gap compliance
+assert property (@(posedge wb_clk_i) disable iff (wb_rst_i)
+    $rose(wb_ack_o) |-> ##1 !wb_stb_i);
+```

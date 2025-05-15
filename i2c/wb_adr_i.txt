@@ -1,0 +1,492 @@
+<think>
+Okay, let's see. The user wants me to extract all unique and valid SystemVerilog assertions for the signal wb_adr_i from the provided list, making sure to include any necessary checks like signal width. They emphasized not modifying the assertions but just picking the unique ones, and ensuring maximum retention.
+
+First, I need to look through each assertion in the list. Let's go one by one.
+
+1. The first assertion is `assert property (@(posedge wb_clk_i) $bits(wb_adr_i) == 3);`. This checks that the width of wb_adr_i is 3 bits. Since the documentation mentions the addresses 0x00 to 0x05, which are 3-bit addresses (0 to 5 in decimal is 0 to 101 in binary, so 3 bits), this seems correct. This is a width check, so it should be included if not already covered.
+
+2. The second assertion is a property `valid_address_range` which checks that when wb_stb_i and wb_cyc_i are high, wb_adr_i is inside {0,1,2,3,4}. Wait, the addresses in the documentation are 0x00 to 0x04 (PRERlo, PRERhi, CTR, TXR, RXR, CR, SR), which are 6 registers, but the addresses are from 0 to 5? Wait, looking back: Registers list shows addresses 0x00 to 0x05 (0,1,2,3,4,5). So addresses 0-5. But the second assertion checks inside {0,1,2,3,4}, which is up to address 4. That might be a mistake. But the user provided this, so maybe the example in the docs has a typo? Wait, looking at the documentation:
+
+Registers list:
+- PRERlo: 0x00
+- PRERhi: 0x01
+- CTR: 0x02
+- TXR: 0x03
+- RXR: 0x04
+- CR: 0x05
+- SR: 0x06?
+
+Wait, no. The list shows:
+
+Name    Address
+PRERlo 0x00
+PRERhi 0x01
+CTR     0x02
+TXR     0x03
+RXR     0x04
+Command Register 0x05
+Status Register 0x06
+
+Wait, no. Wait, looking at the documentation's registers list:
+
+In section 3.1 Registers list:
+
+Name       Address | Width | Access | Description
+PRERlo    0x00    | RW    | Clock Prescale lo
+PRERhi    0x01    | RW    | hi-byte
+CTR       0x02    | RW    | Control
+TXR       0x03    | W     | Transmit
+RXR       0x04    | R     | Receive
+CR        0x05    | W     | Command
+SR        0x06    | R     | Status
+
+Wait, there are 7 registers, addresses 0x00 to 0x06. But in the provided assertions, some check addresses up to 4 or 5. Wait, the user's list includes assertions like:
+
+- "wb_adr_i inside {0,1,2,3,4}" (addresses 0-4)
+- "wb_adr_i inside {[0:4]}" which is same as above
+- Another checks "wb_adr_i[2:0] <= 3'h5", which allows 0-5.
+
+But according to the documentation, valid addresses are 0x00 to 0x06. Wait, 0x00 is 0, 0x06 is 6. So that's 7 addresses. So the valid addresses should be 0 to 6. But the user's provided assertions might have errors. But since the user's provided assertions are given, perhaps the documentation changed or there was a misunderstanding. However, the user's task is to extract assertions from the given list, not correct them. So regardless of whether they match the docs, I need to include them as they are.
+
+But in the given list, some assertions check addresses up to 4, others up to 5. For example, the last assertion says "wb_adr_i[2:0] <= 3'h5", which allows 0-5. So that's 6 addresses (0-5). But according to the documentation, there are 7 registers (0x00-0x06), which would require addresses 0-6. But the user's provided assertions might be conflicting here. However, since the user's list has these, I just need to include them as unique.
+
+Looking at the list of assertions provided by the user:
+
+1. First assertion checks $bits(wb_adr_i) ==3. This is a width check, important.
+
+Then there are multiple valid_address_range properties. Some check inside {0,1,2,3,4}, others inside {[0:4]}, which is the same, and another checks wb_adr_i[2:0] <=5.
+
+So, these are different. For example, "inside {0,1,2,3,4}" allows addresses 0-4 (5 registers), but "inside {[0:4]}" is same. Another uses [0:4], which is same. But then another assertion uses "wb_adr_i[2:0] <=3'h5", which allows 0-5 (6 addresses), and another mentions 0x05 in example code.
+
+So these are different. So the user provided different address range checks. Need to see which are unique.
+
+Looking at the list:
+
+- Assertion 2: valid_address_range with (wb_adr_i inside {0,1,2,3,4}).
+
+- Assertion 4: valid_address_range with (wb_adr_i inside {[0:4]}), which is same as {0,1,2,3,4} in SV.
+
+Wait, [0:4] includes 0 to 4, which is same as 0,1,2,3,4. So assertion 2 and 4 are same? Let's confirm: {[0:4]} in SV is 0,1,2,3,4. So yes, the same as {0,1,2,3,4}. So these two assertions are duplicates. But in the user's list, assertions 2 and 4 both define valid_address_range, but with the same condition, so one is redundant.
+
+But in the user's list, the fifth assertion is a different address_stability.
+
+Then the seventh assertion: unused_address_bits checks that wb_adr_i[2:0] <=3'h5, which allows 0-5 (since it's 3 bits). So that's different from the previous ranges.
+
+So the first thing is to identify unique assertions. The ones related to valid_address_range have different conditions. So assertion 2 and 4 are same, but assertion 7 is different.
+
+So the unique valid_address_range assertions would be:
+
+- (wb_adr_i inside {0,1,2,3,4}) → from assertion 2 and 4 (same, but need to include once)
+
+- (wb_adr_i[2:0] <= 3'h5) → from assertion 7.
+
+So these are two different address range checks, both present in the list. So need to retain both?
+
+Wait, but the user says to extract all unique and valid assertions. So if they are different, need to include both. But if two assertions check the same thing, they are duplicates and only one is kept.
+
+But in this case, the valid_address_range in assertion 2 and 4 are same, so only one is kept. However, the user's list may have multiple similar assertions. Let's check.
+
+Looking at the list:
+
+1. First assertion: $bits(wb_adr_i) ==3.
+
+2. 'valid_address_range' with addresses 0-4.
+
+3. 'address_stability' for stable wb_adr_i until ack.
+
+4. Another 'valid_address_range' with [0:4].
+
+5. Another 'address_stability' with different formulation.
+
+6. Another 'address_stability' with |=>.
+
+7. 'unused_address_bits' checking wb_adr_i[2:0] <=5.
+
+So for the valid_address_range, assertion 2 and 4 are same, so only one needs to be included. Similarly, the 'address_stability' has three different versions.
+
+So the unique assertions are:
+
+1. Width check ($bits(wb_adr_i) ==3).
+
+2. valid_address_range (0-4).
+
+3. Another valid_address_range (wb_adr_i[2:0] <=5).
+
+Wait, maybe assertion 7 is another way to check addresses.
+
+Wait, the user's assertion 7 is:
+
+"property unused_address_bits;\n    @(posedge wb_clk_i) disable iff (arst_i || wb_rst_i)\n    (wb_stb_i && wb_cyc_i) |-> (wb_adr_i[2:0] <= 3'h5); // Valid addresses 0x00-0x05\nendproperty\nassert property (unused_address_bits);"
+
+This checks that the lower 3 bits of wb_adr_i are <=5, meaning addresses 0x00 to 0x05, which is 0-5 (6 addresses). So it's a different check than the 0-4 range. So assertion 7 is different from assertion 2 and 4. So this would mean that the user has two different valid address range checks: one up to 4 and another up to 5. Are these both valid?
+
+But according to the documentation's register list, there are addresses up to 0x06 (SR at 0x06). Wait, looking back:
+
+In the Registers list, the addresses are:
+
+PRERlo 0x00
+
+PRERhi 0x01
+
+CTR 0x02
+
+TXR 0x03
+
+RXR 0x04
+
+CR 0x05
+
+SR 0x06
+
+So that's 7 addresses (0x00 to 0x06). But the user's assertions check up to 4, 5, or 5. The documentation says that the address for SR is 0x06. So the valid addresses are 0x00 to 0x06 (0 to 6). However, none of the user's assertions check up to 6. So this could be an error in the user's provided assertions. But the task is to extract from the given list, not correct them. So the user's seventh assertion allows addresses up to 5 (0x05), which would miss the SR register at 0x06. But since the user's assertion is written that way, I need to include it as is.
+
+So, moving forward, the unique assertions for valid address ranges in the user's list are:
+
+- Assertion 2/4: 0-4 (0x00-0x04)
+
+- Assertion 7: 0-5 (0x00-0x05)
+
+But both are present in the user's assertions. So they are different and both need to be included as unique.
+
+Then, the other assertions are about address stability. There are three different versions:
+
+- Assertion3: address_stability requires that once wb_stb_i and wb_cyc_i are asserted, the address remains stable until wb_ack_o is received.
+
+- Assertion5: another address_stability that uses throughout and a different sequence.
+
+- Assertion6: another address_stability that uses |=> $stable(wb_adr_i) when not acked.
+
+These are three different ways to check address stability. Are they unique or overlapping?
+
+For example, assertion3: once stb and cyc are high, wb_adr_i must remain stable until ack occurs.
+
+Assertion5: same trigger, but checks that address is stable throughout the cycle until ack.
+
+Assertion6: if stb, cyc, and not acked, then next cycle address is stable.
+
+These are different formulations. So all three would be unique and need to be retained.
+
+Then the first assertion is the width check, which must be present.
+
+So compiling all unique assertions:
+
+1. Width check: $bits(wb_adr_i) ==3.
+
+2. valid_address_range (0-4).
+
+3. valid_address_range (0-5 via [2:0] <=5).
+
+Wait, but assertion7's comment says "Valid addresses 0x00-0x05", which are 0-5, but 3 bits can go up to 7 (0-7). Wait, the check is wb_adr_i[2:0] <=3'h5, which is 5 in decimal. So addresses 0-5, as the comment says.
+
+So assertion7 allows up to 5, which may or may not match documentation, but according to the user's code, it's there.
+
+So the unique assertions from the user's list are:
+
+1. Check width is 3 bits.
+
+2. valid_address_range with addresses 0-4.
+
+3. address_stability until ack.
+
+4. valid_address_range with addresses 0-5 (unused_address_bits).
+
+5. address_stability with throughout.
+
+6. address_stability with next cycle stable.
+
+Wait, but the user's list has seven assertions. Let's list them again:
+
+1. First is width check.
+
+2. valid_address_range (0-4).
+
+3. address_stability until ack.
+
+4. valid_address_range (same as 2, but written as [0:4]).
+
+5. address_stability with throughout.
+
+6. address_stability with next cycle.
+
+7. unused_address_bits (0-5).
+
+So, assertion 4 is same as 2, written differently. So they are duplicates and only one is kept. Therefore, in the unique list, assertions 2 and 4 would be considered duplicates, so only one is kept.
+
+Similarly, the address_stability ones (3, 5, 6) are all different and should be included.
+
+So the unique assertions would be:
+
+1. $bits(wb_adr_i) ==3.
+
+2. valid_address_range (inside {0,1,2,3,4}).
+
+3. valid_address_range (wb_adr_i[2:0] <=5).
+
+4. address_stability (stable until ack).
+
+5. address_stability (throughout sequence).
+
+6. address_stability (next cycle stable).
+
+But the user's list also includes two versions of valid_address_range (inside {0,1,2,3,4} and inside {[0:4]}), which are the same. So they should be merged.
+
+Wait, in the user's provided list, assertion2 and assertion4 are two properties both named valid_address_range, but their conditions are written differently: {0,1,2,3,4} vs. {[0:4]}. But in SystemVerilog, both are equivalent. So they are duplicates and only one is kept.
+
+Similarly, the seventh assertion is a different check. So after merging duplicates, the unique assertions are:
+
+- Width check.
+
+- valid_address_range (0-4).
+
+- valid_address_range (0-5).
+
+- address_stability (three different versions).
+
+So in the final list, need to include all unique ones.
+
+So, compiling all unique assertions from the list without duplicates:
+
+1. Assertion1: $bits(wb_adr_i) ==3.
+
+2. Assertion2: valid_address_range with addresses 0-4.
+
+3. Assertion7: unused_address_bits (wb_adr_i[2:0] <=5).
+
+4. Assertion3: address_stability until ack.
+
+5. Assertion5: address_stability throughout sequence.
+
+6. Assertion6: address_stability next cycle.
+
+Wait, but the user's assertion5 is:
+
+property address_stability;
+  @(posedge wb_clk_i) disable iff (arst_i || wb_rst_i)
+  (wb_stb_i && wb_cyc_i) |-> ##[0:1] $stable(wb_adr_i) throughout (wb_cyc_i[->1] ##0 wb_ack_o);
+endproperty
+
+This is a different formulation than assertion3. So it's a different assertion.
+
+Similarly, assertion6 is:
+
+property address_stability;
+  @(posedge wb_clk_i) disable iff (wb_rst_i || arst_i)
+  (wb_stb_i && wb_cyc_i && !wb_ack_o) |=> $stable(wb_adr_i);
+endproperty
+
+This checks that if stb, cyc, and no ack, then next cycle address is stable.
+
+These are three different formulations for address stability. All are unique.
+
+Therefore, the final list should include all these assertions.
+
+The user also mentioned that the width check must be present. The given list starts with that assertion, so it's included.
+
+So the unique assertions from the user's list are:
+
+1. Check width is 3 bits.
+
+2. valid_address_range (0-4).
+
+3. address_stability until ack.
+
+4. valid_address_range ([0:4]) → same as 2, so not included again.
+
+5. address_stability throughout sequence.
+
+6. address_stability next cycle.
+
+7. unused_address_bits (up to 5).
+
+Therefore, the unique assertions are:
+
+1. $bits(wb_adr_i) ==3.
+
+2. valid_address_range (0-4).
+
+3. valid_address_range (0-5).
+
+4. address_stability until ack.
+
+5. address_stability throughout.
+
+6. address_stability next cycle.
+
+7. address_stability next cycle (different from others).
+
+Wait, but assertion7 is about address bits being <=5, which is a different check.
+
+So putting this all together, the user should have the following unique assertions from the provided list:
+
+- The width assertion.
+
+- Two valid address range checks: up to 4 and up to 5.
+
+- Three address stability checks.
+
+But according to the user's instructions, maximize retained assertions. So they want all possible unique ones, even if they are different checks.
+
+So the final answer should include all the unique assertions provided, even if they might overlap or conflict, as long as they are unique in code.
+
+Now, looking at the provided list again, the user's answer must include:
+
+- The first assertion checking the bit width.
+
+- The valid_address_range from assertion2 (inside{0,1,2,3,4}).
+
+- The valid_address_range from assertion4 (same as 2, but written as [0:4], so duplicate).
+
+- The unused_address_bits assertion (7) which is different.
+
+Thus, since 2 and 4 are duplicates, only one is retained. Similarly, 7 is different.
+
+The address_stability assertions (3,5,6) are all different.
+
+So, the unique assertions are:
+
+1. $bits(wb_adr_i) ==3.
+
+2. valid_address_range (inside{0,1,2,3,4}).
+
+3. address_stability (until ack).
+
+4. valid_address_range (wb_adr_i[2:0] <=5).
+
+5. address_stability (throughout sequence).
+
+6. address_stability (next cycle when not acked).
+
+So these are six unique assertions from the original seven provided, since assertion4 is a duplicate of assertion2.
+
+But the user's list has seven entries. Let's verify each:
+
+Original list:
+
+1. 'assert property (@(posedge wb_clk_i) $bits(wb_adr_i) == 3);' → unique.
+
+2. 'property valid_address_range; ... inside {0,1,2,3,4}' → unique.
+
+3. 'property address_stability; ... |-> $stable(wb_adr_i) until wb_ack_o;' → unique.
+
+4. 'property valid_address_range; ... inside {[0:4]}' → same as 2.
+
+5. 'property address_stability; ... ##[0:1] $stable ... throughout ...' → unique.
+
+6. 'property address_stability; ... |=> $stable ...' → unique.
+
+7. 'property unused_address_bits; ... wb_adr_i[2:0] <=3'h5' → unique.
+
+So assertion4 is a duplicate of 2 and should be excluded. The rest are unique.
+
+Thus, the final list includes assertions 1,2,3,5,6,7. Assertion4 is a duplicate and excluded.
+
+But need to check if in the user's list, assertion7 is a different name (unused_address_bits) but it checks addresses up to 5, which may not be correct according to the docs but is present in the user's assertions. So it should be included.
+
+So the answer would include:
+
+1. Width check.
+
+2. valid_address_range (0-4).
+
+3. valid_address_range (0-5/unused_address_bits).
+
+Wait, assertion7 is named unused_address_bits but is a different property.
+
+So the user provided:
+
+- 2: valid_address_range → 0-4.
+
+- 4: same as 2 → ignored.
+
+-7: unused_address_bits → 0-5.
+
+So these are two separate assertions, so both are included.
+
+Then the three address_stability assertions: 3,5,6.
+
+Now, to format the final answer:
+
+The user wants all the unique ones. Also, the width check is included in the first assertion. Since the user didn't mention that the width check was missing, but in the list it's present, so included.
+
+So the final list is:
+
+1. Width assertion.
+
+2. valid_address_range (0-4).
+
+3. valid_address_range (0-5 via [2:0] <=5).
+
+4. address_stability (until ack).
+
+5. address_stability (throughout).
+
+6. address_stability (next cycle).
+
+7. The unused_address_bits (also 0-5).
+
+Wait, but assertion7 is another way to check the address, so is it redundant with assertion valid_address_range 0-5?
+
+No, because assertion7 allows 0-5, while the original valid_address_range (0-4) allows 0-4. These are two different checks, so both need to be included.
+
+But this might be conflicting, but according to the user's list, they are present. So need to include both.
+
+But perhaps in reality, this is a user mistake, but the task is to extract them as given.
+
+So all the unique assertions are:
+
+1. Width check.
+
+2. valid_address_range (0-4).
+
+3. address_stability until ack.
+
+4. address_stability throughout.
+
+5. address_stability next cycle.
+
+6. unused_address_bits (0-5).
+
+Yes, these are the six unique assertions from the provided list (excluding the duplicate assertion4).
+
+Therefore, the user wants these assertions to be listed between ```systemverilog and ``` tags.
+</think>
+
+```systemverilog
+assert property (@(posedge wb_clk_i) $bits(wb_adr_i) == 3);
+
+property valid_address_range;
+  @(posedge wb_clk_i) disable iff (wb_rst_i || arst_i)
+  (wb_stb_i && wb_cyc_i) |-> (wb_adr_i inside {0,1,2,3,4});
+endproperty
+assert property (valid_address_range);
+
+property address_stability;
+  @(posedge wb_clk_i) disable iff (wb_rst_i || arst_i)
+  (wb_stb_i && wb_cyc_i) |-> $stable(wb_adr_i) until wb_ack_o;
+endproperty
+assert property (address_stability);
+
+property valid_address_range;
+  @(posedge wb_clk_i) disable iff (arst_i || wb_rst_i)
+  (wb_stb_i && wb_cyc_i) |-> (wb_adr_i inside {[0:4]});
+endproperty
+assert property (valid_address_range);
+
+property address_stability;
+  @(posedge wb_clk_i) disable iff (arst_i || wb_rst_i)
+  (wb_stb_i && wb_cyc_i) |-> ##[0:1] $stable(wb_adr_i) throughout (wb_cyc_i[->1] ##0 wb_ack_o);
+endproperty
+assert property (address_stability);
+
+property address_stability;
+  @(posedge wb_clk_i) disable iff (wb_rst_i || arst_i)
+  (wb_stb_i && wb_cyc_i && !wb_ack_o) |=> $stable(wb_adr_i);
+endproperty
+assert property (address_stability);
+
+property unused_address_bits;
+    @(posedge wb_clk_i) disable iff (arst_i || wb_rst_i)
+    (wb_stb_i && wb_cyc_i) |-> (wb_adr_i[2:0] <= 3'h5);
+endproperty
+assert property (unused_address_bits);
+```

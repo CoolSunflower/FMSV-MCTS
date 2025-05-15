@@ -1,0 +1,40 @@
+<think>
+Okay, let me try to figure this out. The user wants me to extract all unique and valid SystemVerilog assertions related to the signal sda_pad_o from the provided list. The key points are to maximize the number of retained assertions and ensure they are unique and valid. Also, check if the width assertion is present and add it if missing.
+
+First, I'll look at the given assertions:
+
+1. "assert property (@(posedge wb_clk_i) (1'b1) |-> ($bits(sda_pad_o) == 1));" – This checks that the width of sda_pad_o is 1 bit. Important for signal width.
+
+2. "property SDA_DRIVE_LOW_WHEN_ENABLED;\n  @(posedge wb_clk_i) (sda_pad_oe == 1'b0) |-> (sda_pad_o == 1'b0);\nendproperty\nassert property (SDA_DRIVE_LOW_WHEN_ENABLED);" – Asserts that when sda_pad_oe is 0 (output enabled), sda_pad_o is driven low. This makes sense because the I2C open-drain should only drive low.
+
+3. "property SDA_STABLE_DURING_SCL_HIGH;\n  @(posedge wb_clk_i) (sda_pad_oe == 1'b0 && scl_pad_i == 1'b1) |-> $stable(sda_pad_o);\nendproperty\nassert property (SDA_STABLE_DURING_SCL_HIGH);" – Ensures that when SCL is high, SDA remains stable if the core is driving it. This is crucial for I2C's data stability during clock high.
+
+4. "property NO_SDA_HIGH_DRIVE_DURING_SCL_HIGH;\n  @(posedge wb_clk_i) (scl_pad_i == 1'b1) |-> !(sda_pad_oe == 1'b0 && sda_pad_o == 1'b1);\nendproperty\nassert property (NO_SDA_HIGH_DRIVE_DURING_SCL_HIGH);" – Prevents the core from driving SDA high when SCL is high. This is important because driving high during SCL high could cause a start/stop condition unintentionally.
+
+Now, check for uniqueness and validity. All four assertions are valid for sda_pad_o. The first checks the bit width, which is essential. The next three address different functional aspects. They don't overlap, so they should all be retained.
+
+The user also mentioned that the width assertion must be present. Since it's already included as the first assertion, there's no need to add anything else.
+
+So, all four assertions are unique and valid. No duplicates. So the answer should list all four.
+</think>
+
+```systemverilog
+// Width check for sda_pad_o
+assert property (@(posedge wb_clk_i) (1'b1) |-> ($bits(sda_pad_o) == 1));
+
+// Functional checks for sda_pad_o
+property SDA_DRIVE_LOW_WHEN_ENABLED;
+  @(posedge wb_clk_i) (sda_pad_oe == 1'b0) |-> (sda_pad_o == 1'b0);
+endproperty
+assert property (SDA_DRIVE_LOW_WHEN_ENABLED);
+
+property SDA_STABLE_DURING_SCL_HIGH;
+  @(posedge wb_clk_i) (sda_pad_oe == 1'b0 && scl_pad_i == 1'b1) |-> $stable(sda_pad_o);
+endproperty
+assert property (SDA_STABLE_DURING_SCL_HIGH);
+
+property NO_SDA_HIGH_DRIVE_DURING_SCL_HIGH;
+  @(posedge wb_clk_i) (scl_pad_i == 1'b1) |-> !(sda_pad_oe == 1'b0 && sda_pad_o == 1'b1);
+endproperty
+assert property (NO_SDA_HIGH_DRIVE_DURING_SCL_HIGH);
+```

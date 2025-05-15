@@ -1,0 +1,66 @@
+<think>
+Okay, let's tackle this step by step. The user wants me to correct the syntax of the given SystemVerilog assertions related to the arst_i signal. The main issues from the error logs were that the signal names scl_padoen_oe and sda_padoen_oe weren't declared. The user mentioned that in the Verilog code, these signals are renamed to scl_pad_oe and sda_pad_oe. So, the first thing I need to do is adjust the signal names in the assertions to match the correct ones.
+
+Looking at the original assertions:
+
+For the SCL assertion:
+property arst_scl_oe;
+  @(posedge wb_clk_i) (arst_i == ARST_LVL) |-> (scl_padoen_oe == 1'b1);
+endproperty
+assert property (arst_scl_oe);
+
+And for the SDA assertion:
+property arst_sda_oe;
+  @(posedge wb_clk_i) (arst_i == ARST_LVL) |-> (sda_padoen_oe == 1'b1);
+endproperty
+assert property (arst_sda_oe);
+
+The errors were because scl_padoen_oe and sda_padoen_oe weren't found. The user clarified that these should be scl_pad_oe and sda_pad_oe. So, I'll replace the signal names accordingly.
+
+Next, I notice that ARST_LVL is a parameter in the specification. The core has a parameter ARST_LVL which defines the active level of the asynchronous reset. However, in the assertions, ARST_LVL is used directly. Since this is a parameter, I should declare it as a localparam in the assertion module if it's not already defined in the scope where the assertions are placed. But the user mentioned not to create new signals, so I can include it as a localparam.
+
+Wait, but the specification says ARST_LVL is a parameter with default 1'b0. So, in the SystemVerilog code, this should be a module parameter or a localparam. Since the user allows adding parameters with localparam if missing, I can define it.
+
+So, adding:
+localparam ARST_LVL = 1'b0;
+
+But since the actual value might be set during instantiation, maybe it's better to reference the parameter correctly. However, in the context of assertions, if the module has this parameter, we can use it. If not, defining it as a localparam based on the specification's default makes sense.
+
+Putting it all together, the corrected assertions would have the correct signal names and include the ARST_LVL parameter.
+
+So, the corrected assertions would be:
+
+For SCL:
+property arst_scl_oe;
+  @(posedge wb_clk_i) (arst_i == ARST_LVL) |-> (scl_pad_oe == 1'b1);
+endproperty
+assert property (arst_scl_oe);
+
+For SDA:
+property arst_sda_oe;
+  @(posedge wb_clk_i) (arst_i == ARST_LVL) |-> (sda_pad_oe == 1'b1);
+endproperty
+assert property (arst_sda_oe);
+
+Additionally, if ARST_LVL isn't already defined in the scope, I should include it as a localparam. But the user's specification mentions it's a core parameter, so assuming it's available. If not, adding a localparam declaration would be necessary. However, the user's problem was about signal names, not the parameter. The error logs didn't mention ARST_LVL being undefined, so perhaps it's already declared in the design. Therefore, the main fix is changing the signal names from scl_padoen_oe to scl_pad_oe and similarly for SDA.
+
+Also, the user specified not to use 'else' constructs, which these assertions don't have, so that's fine.
+
+So, the final corrected assertions are as above, with the corrected signal names.
+</think>
+
+```systemverilog
+localparam ARST_LVL = 1'b0; // From spec default value
+
+// When asynchronous reset is active, SCL output enable should be disabled
+property arst_scl_oe;
+  @(posedge wb_clk_i) (arst_i == ARST_LVL) |-> (scl_pad_oe == 1'b1);
+endproperty
+assert property (arst_scl_oe);
+
+// When asynchronous reset is active, SDA output enable should be disabled 
+property arst_sda_oe;
+  @(posedge wb_clk_i) (arst_i == ARST_LVL) |-> (sda_pad_oe == 1'b1);
+endproperty
+assert property (arst_sda_oe);
+```

@@ -1,0 +1,119 @@
+<think>
+Okay, let's see. The user wants me to extract all unique and valid SystemVerilog assertions from the provided list that relate to the signal 'rxr'. They emphasized maximizing the number of retained assertions without modifying them. Also, they mentioned ensuring that an assertion checking the width of 'rxr' is present, adding it if missing.
+
+First, I'll go through each assertion in the list and check if it's related to 'rxr'. Since all the provided assertions are in the list given, and the user specified to extract those for 'rxr', I need to verify each one.
+
+Looking at the list:
+
+1. The first assertion checks that $bits(rxr) is 8. This directly relates to the width of 'rxr', so it's definitely needed and should be included.
+
+2. The next several assertions are properties named p_rxr_write_protect, p_rxr_reset, p_rxr_update_after_read, etc. These all reference 'rxr' in their conditions, so they're all valid.
+
+I need to check for uniqueness. Some of these properties might be duplicates or variations. For example, different p_rxr_write_protect assertions might have slightly different disable conditions. The user said not to modify them, just include unique ones as they are.
+
+Looking at p_rxr_write_protect:
+
+- There are multiple versions with different disable iff conditions. For example, one uses disable iff (wb_rst_i || arst_i != !ARST_LVL), another uses disable iff (wb_rst_i || arst_i == ARST_LVL). These are different, so even if the property is named the same, the actual conditions differ. Therefore, they should all be considered unique and retained.
+
+Same with p_rxr_reset: different disable conditions or reset triggers. Each variation is unique as written.
+
+Other properties like p_rxr_read_update and p_rxr_valid_after_read check different conditions. The user wants all unique ones, so each distinct assertion should be included.
+
+Now, checking if the width assertion is present. The first assertion in the list is the $bits check, which is included. So we don't need to add anything else.
+
+I need to list all these, ensuring no duplicates. Since the user provided them and wants all unique ones, even if they seem similar, I'll include each as they are. The only thing to confirm is that each assertion is syntactically correct and pertains to 'rxr'.
+
+Finally, make sure that all assertions are enclosed within ```systemverilog ... ``` as per the instructions.
+</think>
+
+```systemverilog
+// Width check assertion
+assert property (@(posedge wb_clk_i) $bits(rxr) == 8);
+
+// Write protection assertions
+property p_rxr_write_protect;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  (wb_adr_i == 3 && wb_we_i && wb_stb_i && wb_cyc_i) |-> (rxr == $past(rxr));
+endproperty
+assert property (p_rxr_write_protect);
+
+property p_rxr_write_protect;
+  @(posedge wb_clk_i) 
+  disable iff (wb_rst_i || arst_i != !ARST_LVL)
+  (wb_adr_i == 3 && wb_we_i && wb_stb_i && wb_cyc_i) 
+  |=> 
+  (rxr == $past(rxr));
+endproperty
+assert property (p_rxr_write_protect);
+
+property p_rxr_write_protect;
+  @(posedge wb_clk_i) disable iff (wb_rst_i || arst_i == ARST_LVL)
+  (wb_adr_i == 3 && wb_we_i && wb_stb_i && wb_cyc_i) |=> (rxr == $past(rxr));
+endproperty
+assert property (p_rxr_write_protect);
+
+property p_rxr_write_protect;
+  @(posedge wb_clk_i) disable iff (wb_rst_i || arst_i != !ARST_LVL)
+  (wb_adr_i == 3 && wb_we_i && wb_stb_i && wb_cyc_i) |=> (rxr == $past(rxr));
+endproperty
+assert property (p_rxr_write_protect);
+
+// Reset assertions
+property p_rxr_reset;
+  @(posedge wb_clk_i) disable iff (arst_i != ARST_LVL)
+  (arst_i == ARST_LVL || wb_rst_i) |=> (rxr == 8'h00);
+endproperty
+assert property (p_rxr_reset);
+
+property p_rxr_reset;
+  @(posedge wb_clk_i) 
+  (arst_i == !ARST_LVL || $past(wb_rst_i)) 
+  |=> 
+  (rxr == 8'h00);
+endproperty
+assert property (p_rxr_reset);
+
+property p_rxr_reset;
+  @(posedge wb_clk_i) disable iff (arst_i == !ARST_LVL)
+  (wb_rst_i) |=> (rxr == 8'h00);
+endproperty
+assert property (p_rxr_reset);
+
+// Update/read assertions
+property p_rxr_update_after_read;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  $rose(sr[0]) && !sr[3] |=> !$stable(rxr);
+endproperty
+assert property (p_rxr_update_after_read);
+
+property p_rxr_read_update;
+  @(posedge wb_clk_i) disable iff (wb_rst_i || arst_i == ARST_LVL)
+  ($past(cr[2]) && $rose(sr[0]) && !sr[3]) |-> (rxr != $past(rxr, 2));
+endproperty
+assert property (p_rxr_read_update);
+
+property p_rxr_update_after_read;
+  @(posedge wb_clk_i) disable iff (wb_rst_i || arst_i != !ARST_LVL)
+  $rose(sr[0]) && !sr[3] |=> !$stable(rxr);
+endproperty
+assert property (p_rxr_update_after_read);
+
+// Validity check assertions
+localparam ARST_LVL = 1'b0;
+property p_rxr_read_update;
+  @(posedge wb_clk_i) 
+  disable iff (arst_i == ARST_LVL || wb_rst_i)
+  ($past(cr[2]) && $rose(sr[0]) && !sr[3]) |-> !$isunknown(rxr);
+endproperty
+assert property (p_rxr_read_update);
+
+localparam ARST_LVL = 1'b0;
+property p_rxr_valid_after_read;
+  @(posedge wb_clk_i) 
+  disable iff (arst_i == ARST_LVL || wb_rst_i)
+  ($fell(sr[3]) && $rose(sr[0])) // Transfer completion
+  |->
+  !$isunknown(rxr);
+endproperty
+assert property (p_rxr_valid_after_read);
+```

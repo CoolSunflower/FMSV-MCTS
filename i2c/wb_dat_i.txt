@@ -1,0 +1,335 @@
+<think>
+Okay, let me try to tackle this problem step by step. The user wants me to extract all unique and valid assertions related to the signal `wb_dat_i` from the given list. They mentioned that maximizing the number of retained assertions is crucial. Also, I need to ensure that assertions about the signal's width are included, adding them if missing.
+
+First, I'll go through each provided assertion to see which ones relate to `wb_dat_i`.
+
+1. **Assertion 1**: Checks that `wb_dat_i` is 8 bits wide. Directly relevant. This is a width check.
+
+2. **Assertion 2**: Ensures `wb_dat_i` remains stable until `wb_ack_o` is received. Stability during write cycles.
+
+3. **Assertion 3**: Checks reserved bits in the control register are zero when writing. This involves `wb_dat_i` when writing to address 0x2 (control register). The mask is 8'hFC, so bits 7-2 must be 0.
+
+4. **Assertion 4**: Similar to 3 but for the command register (address 0x4), mask 8'hE8. Checks bits 7-5 and bit 3 of `wb_dat_i` are 0.
+
+5. **Assertion 5**: Another width check, same as assertion 1.
+
+6. **Assertion 6**: Same as assertion 5. Duplicate width check.
+
+7. **Assertion 7**: Checks `wb_dat_i` stability during write without considering `wb_ack_o`. Might be redundant if assertion 2 covers it with more specific conditions.
+
+8. **Assertion 8**: Similar to assertion 3, using a different mask but same register. Checks bits 7-2 of `wb_dat_i` are zero.
+
+9. **Assertion 9**: Similar to assertion 4, checks same bits in command register.
+
+10. **Assertion 10**: Another stability check during write, ensuring data is stable until `wb_ack_o`. Similar to assertion 2 but with different syntax.
+
+11. **Assertion 11**: Repeats the control register reserved bits check with the same mask as assertion 3.
+
+12. **Assertion 12**: Repeats command register check same as assertion 4.
+
+13. **Assertion 13**: Ensures `wb_dat_i` has no unknown values during write. Validity check.
+
+Now, I need to identify duplicates and unique ones:
+
+- **Width Checks**: Assertions 1,5,6. All the same. Keep one (assertion 1 or 5/6). Since the user wants to maximize retained assertions, but duplicates aren't helpful, choose the most complete one. The first one is `localparam CTRL_RESV_MASK = 8'hFC; ... $bits(wb_dat_i) == 8`. But others are similar. However, the user says to not modify the assertions, so include all even if duplicates? Wait, the user says extract unique ones. So duplicates should be removed.
+
+Wait, the user says "extract all unique and valid assertions". So duplicates are to be removed. For example, assertions 1,5,6 all check width. Are they identical? Let me check:
+
+- Assertion 1: `$bits(wb_dat_i) == 8` with some localparams.
+- Assertion 5: Same check, same localparams.
+- Assertion 6: Same as 5, but named p_wb_dat_i_width.
+
+But the code inside is the same. So they are duplicates in functionality. But since the user says not to modify the actual assertion, maybe they are slightly different in code but same in effect. The user wants unique assertions, so duplicates should be omitted. However, the instructions say to "maximise the number of retained assertions" but that's conflicting. Wait, maybe the user wants to retain as many as possible even if they are similar, but only if they are different in code. But perhaps some are exactly the same. Let me check the code:
+
+Looking at the list:
+
+Assertion 1:
+"localparam CTRL_RESV_MASK = 8'hFC;\nlocalparam CMD_RESV_MASK = 8'hE8;\nassert property (@(posedge wb_clk_i) $bits(wb_dat_i) == 8);"
+
+Assertion 5:
+"localparam CTRL_RESV_MASK = 8'hFC;\nlocalparam CMD_RESV_MASK = 8'hE8;\nproperty width_check;\n  @(posedge wb_clk_i) 1 |-> ($bits(wb_dat_i) == 8);\nendproperty\nassert property (width_check);"
+
+Assertion 6:
+"localparam CTRL_RESV_MASK = 8'hFC;\nlocalparam CMD_RESV_MASK = 8'hE8;\nproperty p_wb_dat_i_width;\n  @(posedge wb_clk_i) 1 |-> ($bits(wb_dat_i) == 8);\nendproperty\nassert property (p_wb_dat_i_width);"
+
+So all three check the width but are written differently. The first is a direct assert, the others use properties. However, the user's instruction says not to modify the actual assertion. So even if they are functionally the same, they are different in code and thus considered unique. But perhaps the user considers them as duplicates. But since they are code-wise different, maybe they should be included as separate assertions. However, in SystemVerilog, these assertions are checking the same thing, so maybe they are redundant and can be considered duplicates. But the user says to extract all unique ones. So perhaps each code block is unique, even if they test the same thing. But the user probably wants unique in functionality. Wait, the user says "unique and valid", so functionally unique. Therefore, among the width checks, even if written differently, only one is needed. However, looking at the answer examples, maybe the user includes different forms. Hmm, this is tricky.
+
+But the user wants to maximize retained assertions. So maybe include all variations even if they test the same thing. However, the problem is that some of these might not be valid. For example, assertion 1 doesn't have a disable iff, while others do. Wait no, assertion 1 has no disable iff, assertion 5 and 6 have 'disable iff (wb_rst_i)'? Wait no, looking at the code:
+
+Wait, the code in the assertions:
+
+Assertion 1 is a simple assert with localparams, checking $bits.
+
+Assertion 5 has a property named width_check, triggered at posedge wb_clk_i, with no disable iff. The antecedent is '1' (always true), so it checks every cycle that the width is 8.
+
+Similarly, assertion 6 is similar to 5 but with another property name.
+
+So these are three different assertions but checking the same thing. However, perhaps in practice, they are different. But from a strict SystemVerilog perspective, they might all be equivalent. But since the user wants to retain as many as possible, perhaps they are considered unique and should be included. But that would be incorrect. Alternatively, the user might consider that the same check written in different ways is redundant. But according to the problem statement, "unique" probably refers to unique in their code, not in the functionality. Wait, the user's exact words: "extract all unique and valid assertions from this list for the signal name: wb_dat_i". So unique in the list provided. So if two entries in the list are identical, they are duplicates. But looking at the list, the entries are all different code-wise. Let me check:
+
+The list provided has 13 assertions. Each has different code, even if some test the same condition. For example, there are three width checks (assertions 1,5,6), but each written differently.
+
+But the user says "extract all unique and valid assertions from this list". So if two assertions in the list are the same (code-wise), they are considered duplicates. But in the given list, each assertion is a different code snippet, even if some test the same thing. So in this case, all are unique entries in the list. However, some assertions might not be valid for `wb_dat_i`.
+
+Wait, but the user says "for the signal name: wb_dat_i". So need to check which assertions are actually checking `wb_dat_i`.
+
+Looking at each assertion:
+
+1. Checks width of `wb_dat_i`: valid, directly related.
+
+2. Checks stability of `wb_dat_i` during write until ack: valid.
+
+3. Checks when writing to control register (address 3'h2), reserved bits (mask FC) in `wb_dat_i` are 0: valid.
+
+4. Checks when writing to command register (address 3'h4), reserved bits (mask E8) in `wb_dat_i` are 0: valid.
+
+5. Width check again: same as 1, but different code.
+
+6. Same as 5, different code.
+
+7. Stability during write, but different than assertion 2. This one doesn't require throughout until ack, just $stable during the entire write. But may overlap, but code-wise different.
+
+8. Control reg reserved bits: same as 3, but code uses [7:2] check instead of mask. But it's another assertion for the same thing.
+
+9. Command reg reserved bits: same as 4, using bit ranges instead of mask.
+
+10. Data stability until ack: similar to 2, but written differently.
+
+11. Same as 3, using mask CTRL_RESV_MASK.
+
+12. Same as 4, using CMD_RESV_MASK.
+
+13. Checks no unknown values in `wb_dat_i` during write: valid.
+
+So the assertions that are not directly relevant to `wb_dat_i` are none; all involve `wb_dat_i`.
+
+Now, to determine uniqueness. For example, assertion 3 and 8 and 11—all check the control register's reserved bits but with different code. Similarly, 4,9,12 check command register reserved bits. Assertions 2,7,10 check data stability but with different conditions.
+
+The user says to include all unique ones. So even if they are similar, if they are different code-wise, they are considered unique. Therefore, all 13 assertions are unique in the list.
+
+But the user wants to maximize retained assertions. However, the problem is that some of these assertions might be redundant or cover the same check but in different forms. But the user's instruction is to "Do not attempt to modify the actual assertion in any way, just return me all the unique assertions between the systemverilog tags."
+
+Therefore, the correct approach is to list all the assertions provided in the original list that pertain to `wb_dat_i`, ensuring they are unique (i.e., not exact duplicates in code). But looking at the list given by the user, all 13 assertions are different code-wise, even if some test the same condition.
+
+But wait, let's check if some are exact duplicates. For example, are any two assertions exactly the same?
+
+Looking through the list:
+
+- Assertion 1 and 5 are different. Assertion 1 is a direct assert, while 5 defines a property.
+
+- Assertion 5 and 6 are similar but have different property names (width_check vs p_wb_dat_i_width).
+
+Therefore, all 13 are unique in code. However, some may not be valid. Wait, the user says "valid assertions". So need to check which are valid.
+
+All the provided assertions are valid in syntax and check aspects of `wb_dat_i`:
+
+- Width checks (1,5,6)
+
+- Stability during write (2,7,10)
+
+- Reserved bits in control register (3,8,11)
+
+- Reserved bits in command register (4,9,12)
+
+- No unknown values (13)
+
+So all are valid and relevant.
+
+But the user's problem says "extract all unique and valid assertions from this list for the signal name: wb_dat_i". Since the list provided has 13 entries, all unique in code and all valid for `wb_dat_i`, the answer should include all 13. But that can't be right, because some are duplicates in functionality. The user may have intended to get unique functionalities.
+
+But the user's instruction says to "maximise the number of retained assertions". The assistant's answer needs to include as many as possible, even if some are functionally similar but coded differently. So perhaps the answer includes all 13. But the sample answers given in the user's previous interaction (like the think section) showed that some duplicates were removed. However, the current instructions are different, so I need to follow strictly.
+
+But the user's instruction says: "Do not attempt to modify the actual assertion in any way, just return me all the unique assertions between the ```systemverilog and ``` tags."
+
+Meaning, as long as the code is unique (different code), include it. So even if two assertions check the same thing with different code, they are considered unique and thus included.
+
+Therefore, all 13 are unique and valid. But looking back at the list provided by the user, the actual assertion list has 13 entries. However, upon careful inspection, some have the same code. Wait no, the user's list:
+
+The user provided a list of 13 assertions. Let me check each one's code:
+
+1. Checks $bits(wb_dat_i) ==8.
+
+2. Data stability until ack.
+
+3. Control reg reserved bits using mask.
+
+4. Command reg reserved bits using mask.
+
+5. Same as 1 but with property.
+
+6. Same as 5 with different property name.
+
+7. Data stability during write without ack.
+
+8. Control reg reserved bits with bit ranges.
+
+9. Command reg reserved bits with bit ranges.
+
+10. Data stability until ack, different syntax.
+
+11. Control reg with mask, same as 3.
+
+12. Command reg with mask, same as 4.
+
+13. Checks no unknowns.
+
+Wait, looking at assertion 3 and 11:
+
+Assertion 3: CTRL_RESV_MASK is 8'hFC, and checks (wb_dat_i & 8'hFC) ==0.
+
+Assertion 11: Same mask, same check. So code-wise, are they the same?
+
+Yes:
+
+Assertion 3:
+property ctrl_reg_reserved_bits;
+  @(posedge wb_clk_i) disable iff (arst_i != ARST_LVL || wb_rst_i)
+  (wb_adr_i == 3'h2 && wb_we_i && wb_stb_i && wb_cyc_i) |->
+    (wb_dat_i & 8'hFC) == 0; // Mask 0b11111100
+endproperty
+assert property (ctrl_reg_reserved_bits);
+
+Assertion 11:
+property p_ctrl_reg_reserved;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  (wb_adr_i == 3'h2 && wb_cyc_i && wb_stb_i && wb_we_i) |->
+    (wb_dat_i & CTRL_RESV_MASK) == 8'h0;
+endproperty
+assert property (p_ctrl_reg_reserved);
+
+The difference is in the disable condition: assertion 3 uses `arst_i != ARST_LVL || wb_rst_i`, while assertion 11 uses `arst_i == ARST_LVL || wb_rst_i`. Wait, that's a mistake. Depending on ARST_LVL, the disable condition may be different. For example, if ARST_LVL is 0 (active low), then arst_i != ARST_LVL would be arst_i ==1. But assertion 11 uses arst_i == ARST_LVL. This could be a bug, but in the context of the problem, these are different assertions because the disable conditions are different. Hence, they are unique and both should be included.
+
+Similarly, assertion 4 and 12:
+
+Assertion 4:
+(wb_dat_i & 8'hE8) == 0;
+
+Assertion 12:
+(wb_dat_i & CMD_RESV_MASK) == 8'h0; // CMD_RESV_MASK is 8'hE8.
+
+Same condition, but written differently. So assertion 12 is the same as 4 but using the localparam. Depending on the synthesis, they are equivalent. However, since the code is different, they are unique.
+
+Therefore, all 13 assertions are unique in code and valid for wb_dat_i. However, some might check the same functionality but with different code, but according to the user's instruction, they should all be included.
+
+But the sample answer I'm supposed to write should list all the provided assertions, but perhaps after ensuring that there are no exact duplicates. Checking again:
+
+Looking at the list provided by the user:
+
+Assertion 3 and 11: Different disable conditions. So different.
+
+Assertion 4 and 12: Same check but using a localparam. But the code is different (one uses 8'hE8, the other uses CMD_RESV_MASK which is 8'hE8). However, since CMD_RESV_MASK is defined as 8'hE8, they are functionally the same. But code-wise, different. So both are unique.
+
+Therefore, all 13 are unique code-wise and valid.
+
+But wait, the user's initial list includes:
+
+Assertion 3: mask 8'hFC.
+
+Assertion 8: checks bits 7:2, which is mask 8'hFC (bits 7-2 are the top 6 bits: 11111100 => FC). So assertion 8 is the same as 3 but written with bit ranges instead of a mask. So functionally same, but code different. Hence, unique.
+
+Similarly, assertion 4 (mask E8) and 9 (bits 7:5 and 3).
+
+So yes, the assertions are unique in code and thus all should be included.
+
+But this seems excessive, but the user's instructions are to "maximise the number of retained assertions" and "Do not attempt to modify the actual assertion in any way".
+
+Therefore, the answer should include all 13 provided assertions, as they are all unique and valid for wb_dat_i.
+
+However, looking back, the user's example answer included similar assertions but removed duplicates. However, in this case, the user specifies to return all unique ones from the list. So the answer should list all 13, but ensure they are all in the code.
+
+Wait, but the user's own example in the think section in other answers might have had such a scenario where duplicates are removed, but in this problem, the user is instructing to maximize retained assertions. Therefore, to obey the instruction strictly, all 13 assertions should be included.
+
+But that's not possible, as in the provided list there are 13 assertions. But maybe I need to check again. Let me recount:
+
+The user's list has 13 entries. Each is a separate assertion. All of them are related to wb_dat_i. So need to include all. But let me check each one again for validity.
+
+All assertions involve wb_dat_i:
+
+- Assertion 13 checks that during write, there are no unknown values in wb_dat_i. Valid.
+
+So, in conclusion, the final answer should include all 13 assertions. However, in the list provided, some assertions are duplicates in functionality but different in code, like width checks. But according to the instructions, retain all unique code-wise assertions.
+
+Therefore, the answer is all 13 assertions, listed as they are.
+</think>
+
+```systemverilog
+parameter CTRL_RESV_MASK = 8'hFC;
+parameter CMD_RESV_MASK = 8'hE8;
+
+assert property (@(posedge wb_clk_i) $bits(wb_dat_i) == 8);
+
+property wb_dat_stable_until_ack;
+  @(posedge wb_clk_i) disable iff (arst_i != ARST_LVL || wb_rst_i)
+  (wb_we_i && wb_stb_i && wb_cyc_i) |-> 
+    $stable(wb_dat_i) throughout (1'b1 [*1:$] ##0 wb_ack_o);
+endproperty
+assert property (wb_dat_stable_until_ack);
+
+property ctrl_reg_reserved_bits;
+  @(posedge wb_clk_i) disable iff (arst_i != ARST_LVL || wb_rst_i)
+  (wb_adr_i == 3'h2 && wb_we_i && wb_stb_i && wb_cyc_i) |->
+    (wb_dat_i & 8'hFC) == 0;
+endproperty
+assert property (ctrl_reg_reserved_bits);
+
+property cmd_reg_reserved_bits;
+  @(posedge wb_clk_i) disable iff (arst_i != ARST_LVL || wb_rst_i)
+  (wb_adr_i == 3'h4 && wb_we_i && wb_stb_i && wb_cyc_i) |->
+    (wb_dat_i & 8'hE8) == 0;
+endproperty
+assert property (cmd_reg_reserved_bits);
+
+property width_check;
+  @(posedge wb_clk_i) 1 |-> ($bits(wb_dat_i) == 8);
+endproperty
+assert property (width_check);
+
+property p_wb_dat_i_width;
+  @(posedge wb_clk_i) 1 |-> ($bits(wb_dat_i) == 8);
+endproperty
+assert property (p_wb_dat_i_width);
+
+property wb_dat_i_stable_during_write;
+  @(posedge wb_clk_i) disable iff (wb_rst_i)
+  (wb_we_i && wb_stb_i && wb_cyc_i) |-> $stable(wb_dat_i);
+endproperty
+assert property (wb_dat_i_stable_during_write);
+
+property ctrl_reg_reserved_bits_zero;
+  @(posedge wb_clk_i) disable iff (wb_rst_i)
+  (wb_adr_i == 3'h2 && wb_we_i && wb_stb_i && wb_cyc_i) |-> (wb_dat_i[7:2] == 6'b0);
+endproperty
+assert property (ctrl_reg_reserved_bits_zero);
+
+property cmd_reg_reserved_bits_zero;
+  @(posedge wb_clk_i) disable iff (wb_rst_i)
+  (wb_adr_i == 3'h4 && wb_we_i && wb_stb_i && wb_cyc_i) |-> (wb_dat_i[7:5] == 3'b0 && wb_dat_i[3] == 1'b0);
+endproperty
+assert property (cmd_reg_reserved_bits_zero);
+
+property p_data_stability;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  (wb_cyc_i && wb_stb_i && wb_we_i) |-> 
+  $stable(wb_dat_i) throughout (##[1:2] wb_ack_o);
+endproperty
+assert property (p_data_stability);
+
+property p_ctrl_reg_reserved;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  (wb_adr_i == 3'h2 && wb_cyc_i && wb_stb_i && wb_we_i) |-> 
+  (wb_dat_i & CTRL_RESV_MASK) == 8'h0;
+endproperty
+assert property (p_ctrl_reg_reserved);
+
+property p_cmd_reg_reserved;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  (wb_adr_i == 3'h4 && wb_cyc_i && wb_stb_i && wb_we_i) |-> 
+  (wb_dat_i & CMD_RESV_MASK) == 8'h0;
+endproperty
+assert property (p_cmd_reg_reserved);
+
+property p_no_unknown_values;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  (wb_cyc_i && wb_stb_i && wb_we_i) |-> !$isunknown(wb_dat_i);
+endproperty
+assert property (p_no_unknown_values);
+```

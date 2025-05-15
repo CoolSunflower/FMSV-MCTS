@@ -1,0 +1,100 @@
+assert property (@(posedge wb_clk_i) $bits(scl_pad_o) == 1);
+
+property SCL_OE_Connectivity;
+  @(posedge wb_clk_i) (scl_pad_oe == 0) |-> (scl_pad_o == 0);
+endproperty
+assert property (SCL_OE_Connectivity);
+
+property SCL_ArbitrationLost;
+  @(posedge wb_clk_i) (sr[2] && !wb_rst_i && !arst_i) |-> (scl_pad_oe == 1);
+endproperty
+assert property (SCL_ArbitrationLost);
+
+property SCL_CoreDisabled;
+  @(posedge wb_clk_i) (!ctr[0] && !wb_rst_i && !arst_i) |-> (scl_pad_oe == 1);
+endproperty
+assert property (SCL_CoreDisabled);
+
+property SCL_STA_Release;
+  @(posedge wb_clk_i) (cr[4] && !sr[1] /*Busy*/) |=> (scl_pad_oe == 1);
+endproperty
+assert property (SCL_STA_Release);
+
+property SCL_ClockStretch;
+  @(posedge wb_clk_i) (scl_pad_i == 0 && sr[3] /*TIP*/) |-> (scl_pad_oe == 1);
+endproperty
+assert property (SCL_ClockStretch);
+
+property SCL_OE_Connectivity;
+  @(posedge wb_clk_i) disable iff (wb_rst_i || arst_i)
+  (scl_pad_oe == 0) |-> (scl_pad_o == 0);
+endproperty
+assert property (SCL_OE_Connectivity);
+
+property SCL_ClockStretch;
+  @(posedge wb_clk_i) disable iff (wb_rst_i || arst_i)
+  (scl_pad_i == 0 && scl_pad_oe == 1) |-> ##[1:10] $stable(scl_pad_i);
+endproperty
+assert property (SCL_ClockStretch);
+
+property SCL_DriveLow;
+  @(posedge wb_clk_i) disable iff (wb_rst_i || arst_i)
+  (scl_pad_oe == 0) |-> (scl_pad_o == 0);
+endproperty
+assert property (SCL_DriveLow);
+
+property SCL_ValidStart;
+  @(posedge wb_clk_i) disable iff (wb_rst_i || arst_i)
+  $fell(sda_pad_i) && scl_pad_i |-> ##[1:10] scl_pad_oe == 0;
+endproperty
+assert property (SCL_ValidStart);
+
+property SCL_ValidStop;
+  @(posedge wb_clk_i) disable iff (wb_rst_i || arst_i)
+  $rose(sda_pad_i) && scl_pad_i |-> ##[1:10] scl_pad_oe == 1;
+endproperty
+assert property (SCL_ValidStop);
+
+property SCL_StretchHandling;
+  @(posedge wb_clk_i) disable iff (wb_rst_i || arst_i)
+  (scl_pad_oe == 0 && scl_pad_i == 0) |-> ##1 scl_pad_oe == 1[*1:$] until (scl_pad_i == 1);
+endproperty
+assert property (SCL_StretchHandling);
+
+property SCL_NeverHigh;
+  @(posedge wb_clk_i) (scl_pad_o !== 1'b1);
+endproperty
+assert property (SCL_NeverHigh);
+
+localparam PRESCALE_FORMULA = (CLK_FREQ / (5 * SCL_FREQ)) - 1;
+property SCL_ActivePhase;
+  @(posedge wb_clk_i) disable iff (wb_rst_i || arst_i)
+  (i2c_master_top.sr[2] && i2c_master_top.ctr[0]) |-> ##4 (scl_pad_oe == 0)[*1:$] intersect (scl_pad_o == 0);
+  // TIP bit is bit 2 in Status Register (sr[2]), EN bit is bit 0 in Control Register (ctr[0])
+endproperty
+assert property (SCL_ActivePhase);
+
+localparam PRESCALE_FORMULA = (CLK_FREQ / (5 * SCL_FREQ)) - 1;
+property SCL_StartStop;
+  @(posedge wb_clk_i) disable iff (wb_rst_i || arst_i)
+  (i2c_master_top.cr[5] || i2c_master_top.cr[4]) |-> (scl_pad_oe == 1);
+  // STA bit is bit 5, STO bit is bit 4 in Command Register (cr)
+endproperty
+assert property (SCL_StartStop);
+
+localparam PRESCALE_FORMULA = (CLK_FREQ / (5 * SCL_FREQ)) - 1;
+property SCL_ArbitrationLost;
+  @(posedge wb_clk_i) disable iff (wb_rst_i || arst_i)
+  (i2c_master_top.sr[4] && !wb_rst_i) |-> (scl_pad_oe == 1);
+  // AL bit is bit 4 in Status Register (sr[4])
+endproperty
+assert property (SCL_ArbitrationLost);
+
+localparam PRESCALE_FORMULA = (CLK_FREQ / (5 * SCL_FREQ)) - 1;
+property SCL_CoreDisabled;
+  @(posedge wb_clk_i) disable iff (wb_rst_i || arst_i)
+  (!i2c_master_top.ctr[0] && !wb_rst_i) |-> (scl_pad_oe == 1);
+  // EN bit is bit 0 in Control Register (ctr[0])
+endproperty
+assert property (SCL_CoreDisabled);
+

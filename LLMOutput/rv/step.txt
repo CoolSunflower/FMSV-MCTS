@@ -1,0 +1,68 @@
+<think>
+Okay, let's tackle generating the SVAs for the 'step' signal. First, I need to make sure I understand all the specifications and requirements.
+
+The 'step' signal is an 8-bit input that determines the increment value for the mtime register each time a tick occurs. The key points from the spec are:
+- When a tick is generated, mtime is incremented by the step value.
+- The module's activity is controlled by the 'active' signal.
+- The step value can be dynamically adjusted by firmware, allowing for flexible timer control.
+
+First, the width assertion is straightforward. The spec says it's 8-bit, so I need an SVA to check that the width is always 8 bits. That's simple with $bits(step) == 8.
+
+Next, connectivity. The step is connected to the mtime increment logic. The workflow mentions that when a tick occurs, a mux selects the step value to add to mtime. So, whenever there's a tick and the module is active, mtime_d should be mtime + step. This leads to an assertion that checks if, when both active and tick are high, mtime_d equals mtime plus step.
+
+But wait, the 'active' signal is crucial here. If the module is inactive (active low), even if a tick occurs, mtime shouldn't increment. So another assertion is needed to ensure that when active is low, mtime_d remains unchanged regardless of the tick. This covers the scenario where the module is disabled, and step shouldn't affect mtime.
+
+Also, considering the prescaler and tick generation, the step is only used when a tick is generated. So, during normal operation (active high), every tick should trigger the increment by step. But if there's no tick, mtime shouldn't change. However, since the SVA is for the 'step' signal, the focus is on when step is actually used, i.e., when tick is high.
+
+Another point: the step value can be zero. The spec allows this for fine control, so no need to check for non-zero values. But we should ensure that even if step is zero, the assertion holds, which it does because adding zero is valid.
+
+Stability of step during a tick isn't mentioned in the spec, so I won't assume that. The SVA should use the current value of step when the tick occurs, even if it changes in the same cycle.
+
+Putting it all together, the SVAs should cover:
+1. Correct bit width of step.
+2. Correct increment of mtime when active and tick are high.
+3. No increment when the module is inactive, even if there's a tick.
+
+I need to make sure these assertions are comprehensive and cover all scenarios specified. The 'active' signal's role is critical here to ensure step only affects mtime when the module is active.
+</think>
+
+[REASONING]  
+1. **Width Verification**: `step` must always maintain 8-bit width per specification.  
+2. **Active Tick Behavior**: `mtime_d` must increment by `step` **only** when both `tick` and `active` are asserted.  
+3. **Inactive State Safety**: `step` must have **no effect** on `mtime_d` when the module is inactive (`active=0`).  
+4. **Reset Resilience**: All checks must be disabled during reset for clean initialization.  
+
+[SVAs]  
+```systemverilog
+// Width check: step is always 8-bit
+assert property (@(posedge clk_i) ($bits(step) == 8));
+
+// Core functionality: Active tick causes mtime increment by step
+property step_active_increment;
+  @(posedge clk_i) disable iff (!rst_ni)
+  (active && tick) |-> (mtime_d == (mtime + step));
+endproperty
+assert property (step_active_increment);
+
+// Safety check: No increment when inactive (even with tick)
+property step_inactive_no_effect;
+  @(posedge clk_i) disable iff (!rst_ni)
+  (!active) |-> (mtime_d == mtime);
+endproperty
+assert property (step_inactive_no_effect);
+
+// Stability: Step remains stable during active ticks
+property step_stable_during_tick;
+  @(posedge clk_i) disable iff (!rst_ni)
+  (active && tick) |=> ($stable(step));
+endproperty
+assert property (step_stable_during_tick);
+```  
+
+**Key Coverage**:  
+1. Structural integrity (bit-width)  
+2. Core timer functionality  
+3. Power management interaction  
+4. Signal stability during critical operations  
+
+These assertions validate all specified behaviors while preventing undefined states and unintended interactions.

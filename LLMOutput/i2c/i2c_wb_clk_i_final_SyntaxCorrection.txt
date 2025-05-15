@@ -1,0 +1,28 @@
+<think>
+Okay, let's tackle this problem step by step. The user provided a SystemVerilog assertion with syntax errors and asked for corrections. The errors reported by the Jasper tool include issues with 'max_period' not being a constant, using a real type in an illegal context, and an undeclared signal 'tb_clk'. 
+
+First, I need to understand the original assertion's intent. The property seems to check that the wb_clk_i toggles within a certain maximum period. The original code uses a real variable for max_period, which isn't allowed in properties because they require constants. Also, 'tb_clk' isn't a signal in the specification; the correct clock is wb_clk_i itself.
+
+Next, I'll correct the clocking event. Since wb_clk_i is the master clock, the property should be triggered on its edges, not tb_clk. So replacing @(posedge tb_clk) with @(posedge wb_clk_i) makes sense.
+
+The max_period was calculated using real numbers, but in SystemVerilog assertions, we need to use integer constants. The example in the specification mentions a 32MHz wb_clk_i leading to a prescale value of 0x3F for 100KHz SCL. The maximum period for wb_clk_i should be derived from the system clock's expected frequency. Assuming the system clock is 32MHz, the period is 31.25ns. The original code tried to calculate this dynamically, but that's not allowed. Instead, I'll define a parameter based on the known clock frequency.
+
+The disable iff condition should account for both asynchronous (arst_i) and synchronous (wb_rst_i) resets. The ARST_LVL parameter determines the active level of the asynchronous reset. So, if either reset is active, the property is disabled.
+
+The original assertion used ##[1:$ceil(max_period)] which isn't valid because $ceil isn't allowed in sequences. Instead, using a fixed range based on the clock period makes more sense. For a 32MHz clock, the period is 31.25ns, so allowing a toggle within 32 cycles (1us) is reasonable. I'll define a parameter MAX_CYCLES for this.
+
+Putting it all together, the corrected property uses a parameterized maximum cycle count, triggers on wb_clk_i, and disables during resets. The sequence checks that after a rising or falling edge, the opposite edge occurs within MAX_CYCLES, ensuring the clock toggles correctly.
+</think>
+
+```systemverilog
+parameter ARST_LVL = 1'b0;
+parameter MAX_PERIOD = 32; // Derived from 32MHz clock (31.25ns period)
+
+property wb_clk_toggle;
+    @(posedge wb_clk_i) disable iff (arst_i != ARST_LVL || wb_rst_i)
+    (wb_clk_i |-> ##[1:MAX_PERIOD] !wb_clk_i) and
+    (!wb_clk_i |-> ##[1:MAX_PERIOD] wb_clk_i);
+endproperty
+
+assert property (wb_clk_toggle);
+```

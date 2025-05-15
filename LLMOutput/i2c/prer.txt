@@ -1,0 +1,93 @@
+<think>
+Okay, let's tackle generating the SVAs for the 'prer' signal. First, I need to understand the specifications thoroughly. The 'prer' is a 16-bit register split into PRERlo (0x00) and PRERhi (0x01). It's used to set the clock division factor for the I2C SCL clock. The key points are:
+
+1. **Width**: Must be 16 bits.
+2. **Writability**: Can only be written when the EN bit in the control register (ctr[7]) is 0.
+3. **Reset Value**: 0xFFFF on both asynchronous (arst_i) and synchronous (wb_rst_i) resets.
+4. **Functionality**: Writes when enabled (EN=1) should be ignored.
+
+I'll start with the width assertion. Using $bits(prer) ensures it's 16 bits. Then, connectivity: writes to PRERlo and PRERhi should update the respective bytes only when EN=0. For functionality, writes when EN=1 must not change 'prer'. Also, reset must initialize 'prer' to 0xFFFF.
+
+Considering the Wishbone interface, writes are confirmed with wb_ack_o. Each access takes 2 cycles, so using $past(wb_dat_i,1) makes sense. The disable conditions should handle both resets correctly.
+
+I need to check for stability when EN transitions and ensure no changes during non-write cycles. Also, the reset assertion should check the value immediately during reset, not just the next cycle.
+
+Putting it all together, I'll structure each assertion with proper properties, disable conditions for resets, and ensure all edge cases are covered.
+</think>
+
+```systemverilog
+// --------------------------
+// [Width] Assertions
+// --------------------------
+// Ensure 'prer' is always 16 bits wide
+property prer_width;
+  @(posedge wb_clk_i) disable iff (arst_i != ARST_LVL || wb_rst_i)
+  (1'b1) |-> ($bits(prer) == 16);
+endproperty
+assert property (prer_width);
+
+// --------------------------
+// [Connectivity] Assertions
+// --------------------------
+// PRERlo write propagates to lower byte when core disabled
+property prer_lo_connectivity;
+  @(posedge wb_clk_i) disable iff (arst_i != ARST_LVL || wb_rst_i)
+  (wb_cyc_i && wb_stb_i && wb_we_i && wb_ack_o && (wb_adr_i == 2'b00) && !ctr[7])
+  |=> (prer[7:0] == $past(wb_dat_i,1));
+endproperty
+assert property (prer_lo_connectivity);
+
+// PRERhi write propagates to upper byte when core disabled
+property prer_hi_connectivity;
+  @(posedge wb_clk_i) disable iff (arst_i != ARST_LVL || wb_rst_i)
+  (wb_cyc_i && wb_stb_i && wb_we_i && wb_ack_o && (wb_adr_i == 2'b01) && !ctr[7])
+  |=> (prer[15:8] == $past(wb_dat_i,1));
+endproperty
+assert property (prer_hi_connectivity);
+
+// --------------------------
+// [Functionality] Assertions
+// --------------------------
+// Prescale register ignores writes when core enabled
+property prer_write_ignore_en;
+  @(posedge wb_clk_i) disable iff (arst_i != ARST_LVL || wb_rst_i)
+  (wb_cyc_i && wb_stb_i && wb_we_i && wb_ack_o && (wb_adr_i inside {2'b00, 2'b01}) && ctr[7])
+  |=> (prer == $past(prer,1));
+endproperty
+assert property (prer_write_ignore_en);
+
+// Prescale retains value during non-write cycles
+property prer_stability;
+  @(posedge wb_clk_i) disable iff (arst_i != ARST_LVL || wb_rst_i)
+  !$past(wb_cyc_i && wb_stb_i && wb_we_i && (wb_adr_i inside {2'b00, 2'b01}))
+  |-> (prer == $past(prer));
+endproperty
+assert property (prer_stability);
+
+// --------------------------
+// [Reset] Assertions
+// --------------------------
+// Asynchronous reset initializes to 0xFFFF
+property prer_async_reset;
+  @(posedge wb_clk_i)
+  (arst_i == ARST_LVL) |-> (prer == 16'hFFFF);
+endproperty
+assert property (prer_async_reset);
+
+// Synchronous reset initializes to 0xFFFF
+property prer_sync_reset;
+  @(posedge wb_clk_i)
+  $rose(wb_rst_i) |=> (prer == 16'hFFFF);
+endproperty
+assert property (prer_sync_reset);
+```
+
+**Key Features:**
+1. **Width Verification:** Ensures `prer` maintains 16-bit width under normal operation
+2. **Byte-wise Connectivity:** Validates independent updates of PRERlo/PRERhi when EN=0
+3. **Write Protection:** Guarantees write immunity when core is enabled (EN=1)
+4. **Data Stability:** Maintains value during non-write cycles and EN transitions
+5. **Reset Coverage:** Explicit checks for both asynchronous and synchronous reset mechanisms
+6. **Wishbone Compliance:** Strict adherence to 2-cycle transaction protocol using `wb_ack_o`
+
+These assertions provide comprehensive coverage of the prescale register's specified behavior while handling edge cases and protocol requirements.

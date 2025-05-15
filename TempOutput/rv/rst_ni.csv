@@ -1,0 +1,1116 @@
+spec_name,signal_name,information,output,COMBINER
+rv,,"Here is the mapping information:
+[clk_i]: 1-bit clock input to the tick generator  
+[rst_ni]: 1-bit active low reset signal  
+[active]: 1-bit module active signal  
+[prescaler]: 12-bit prescaler value input for the tick generator  
+[step]: 8-bit step value for incrementing mtime  
+[mtime]: 64-bit current time value  
+[mtimecmp]: Array of 64-bit comparator values for mtime, one per hart  
+[tick]: 1-bit tick output signal  
+[mtime_d]: 64-bit next value of mtime register  
+[intr]: N-bit array of interrupt output signals, one per hart  
+
+Here is the architecture overview:
+{
+  ""TimerModule"": {
+    ""TheoryOfOperation"": {
+      ""BlockDiagram"": {
+        ""Inputs"": {
+          ""clk_i"": ""Clock input to the tick generator"",
+          ""rst_ni"": ""Active low reset signal"",
+          ""active"": ""Module active signal"",
+          ""prescaler"": ""12-bit prescaler value input for the tick generator"",
+          ""step"": ""8-bit step value for incrementing mtime"",
+          ""mtime"": ""64-bit current time value"",
+          ""mtimecmp"": ""Array of 64-bit comparator values for mtime""
+        },
+        ""Outputs"": {
+          ""tick"": ""Tick output signal"",
+          ""mtime_d"": ""64-bit next time value"",
+          ""intr"": ""Interrupt output signals array""
+        },
+        ""TickGenerator"": {
+          ""Description"": ""Creates a tick every time its internal counter hits the given prescaler value. The tick is used to increment mtime by the step value."",
+          ""Harts"": ""Configurable number of harts corresponding to the number of mtime registers""
+        },
+        ""Comparators"": {
+          ""mtimecmp"": ""Array of 64-bit comparator values for mtime""
+        }
+      },
+      ""Description"": {
+        ""IncrementCondition"": ""If mtime is greater than or equal to mtimecmp, the timer raises an interrupt.""
+      }
+    },
+    ""DesignDetails"": {
+      ""TickGenerator"": {
+        ""CallClockTick"": {
+          ""Description"": ""Used to generate a fixed period pulse signal."",
+          ""UseCases"": ""Allows creation of a call-clock timer tick such as 1us or 10us regardless of the system clock period.""
+        },
+        ""SystemClocks"": {
+          ""Example"": ""If a system switches between 48MHz and 200MHz clocks, a prescaler value of 47 for 48MHz and 199 for 200MHz will generate a 1us tick.""
+        },
+        ""Support"": ""Only supports a single fixed clock. Firmware should change the prescaler appropriately.""
+      },
+      ""ConfigurableTimersAndHarts"": {
+        ""Support"": ""More than one HART and/or more than one timer per hart."",
+        ""RegisterConfiguration"": {
+          ""ExampleConfiguration"": ""An example configuration file for N_TIMER 2 and N_HARTS 2. It has separate interrupts per hart and a set of interrupt enable and state registers per hart.""
+        }
+      }
+    },
+    ""SignalDefinitions"": {
+      ""Parameters"": {
+        ""N"": ""Number of harts or timer comparators""
+      },
+      ""Inputs"": {
+        ""clk_i"": ""Input clock signal"",
+        ""rst_ni"": ""Active low asynchronous reset signal"",
+        ""active"": ""Input signal to activate the module"",
+        ""prescaler"": ""Input prescaler value to determine tick frequency"",
+        ""step"": ""Input step value to increment the mtime register"",
+        ""mtime"": ""Input current mtime value"",
+        ""mtimecmp"": ""Input array of mtime comparator values, one per hart""
+      },
+      ""Outputs"": {
+        ""tick"": ""Output tick signal"",
+        ""mtime_d"": ""Output next value of mtime register"",
+        ""intr"": ""Output array of interrupt signals, one per hart""
+      }
+    }
+  }
+}
+
+Here is some more detailed information regarding the architecture:
+
+Summary of Timer Module Architecture Workflow:
+
+1. **Clock and Prescaler Inputs:**  
+   - The `clk_fixed` input drives the `tick gen` block, which generates periodic tick signals.  
+   - The `prescaler` input determines the frequency of the ticks by dividing the input clock.  
+   - This setup allows flexible adjustment of the timer frequency based on the systems requirements.
+2. **Tick Signal Generation:**  
+   - The `tick gen` block outputs a `tick` signal for each hart (`tick[#Harts-1:0]`).  
+   - Each tick represents a time unit for updating the `mtime` register.
+3. **Incrementing mtime Register:**  
+   - The `step` input provides a step value for incrementing the `mtime` register.  
+   - When a tick is received, a multiplexer selects either the `step` value or zero.  
+   - The selected value is added to the current `mtime` value through an adder.  
+   - This approach supports both regular and custom step sizes, enhancing timer flexibility.
+4. **mtime Comparison:**  
+   - The updated `mtime` is compared with the `mtimecmp` comparator value.  
+   - The `>=` comparator generates the `expired` signal when `mtime` meets or exceeds `mtimecmp`.  
+   - This triggers the timer event, typically used for interrupt generation.
+5. **Interrupt Signal (intr):**  
+   - The `expired` signal drives the `intr` output, signaling the processor or system that the timer event occurred.  
+   - The `intr` array supports multi-hart configurations, allowing each hart to handle its own timer interrupt.
+6. **Control Flow and Flexibility:**  
+   - The architecture supports dynamic configuration via `prescaler`, `step`, and `mtimecmp` values.  
+   - The module can adapt to different timer intervals and application-specific timing requirements.  
+Key Takeaways:
+- The architecture provides a robust and configurable timer solution for multi-hart environments.  
+- The `tick gen` with `prescaler` and `step` input combination allows fine-grained control over the timer frequency and increment size.  
+- The `mtime` comparison logic ensures precise interrupt generation based on the `mtimecmp` value.",,
+rv,clk_i,"
+[Signal name]: clk_i
+[Description]:
+    [Definition]: 
+        - Bit-width: 1-bit
+        - Signal type: Input
+        - Connected to: Tick generator
+    [Functionality]: 
+        - Drives the tick generator.
+        - A tick is generated when the internal counter of the tick generator hits the CFG0.prescaler value.
+        - The tick increments mtime by the CFG0.step value.
+    [Interconnection]: 
+        - Works with the prescaler and step values to generate the timer tick.
+        - Influences the mtime register through the tick generation.
+    [Additional information]: 
+        - The module supports a single fixed clock, meaning clk_i remains stable during operation.
+        - When switching system clocks (e.g., 48MHz to 200MHz), only the prescaler value needs to be updated.
+[Related Signals]: 
+    - CFG0.prescaler
+    - CFG0.step
+    - mtime","<think>
+Okay, let's tackle generating the SVAs for clk_i. First, I need to understand the specifications and the previous feedback to ensure correctness.
+
+The clk_i is a 1-bit input clock driving the tick generator. The module uses a fixed clock, so clk_i must remain stable. The tick is generated when the internal counter matches the prescaler value, and mtime increments by the step value on each tick.
+
+From the previous attempts, there were issues with tautological assertions and handling dynamic prescaler changes. The connectivity check using $stable(tick) || $changed(tick) was a tautology. Also, the tick periodicity check didn't handle prescaler changes correctly.
+
+First, the width assertion is straightforward: check clk_i is 1-bit.
+
+For connectivity, instead of the tautology, I'll check that tick doesn't change between clock edges by using a negedge check. This ensures tick stability between posedges.
+
+For functionality, mtime should increment by step when tick is high, considering reset and active signals. Using $past ensures we capture the correct values. The tick periodicity must account for dynamic prescaler changes by using $past(prescaler) and resetting the counter after each tick. Also, the single-cycle tick assertion needs to handle prescaler=0 correctly.
+
+Including disable conditions for reset and active is crucial to avoid false failures. Also, ensuring that the step is cast to 64-bit prevents width mismatch.
+
+Finally, adding checks for clock stability and reset behavior ensures comprehensive coverage.
+</think>
+
+[REASONING]  
+1. **Width Check**: Mandatory per spec to verify 1-bit clock signal integrity.  
+2. **Clock-Tick Alignment**: Ensure tick changes only at clock edges using dual-edge checking.  
+3. **mtime Increment**: Validate timer math with explicit bit-width conversion and reset guards.  
+4. **Prescaler Periodicity**: Handle dynamic prescaler changes using sampled values and counter reset logic.  
+5. **Single-Cycle Pulse**: Allow prescaler=0 configuration while maintaining pulse integrity.  
+
+[SVAs]  
+```systemverilog
+// Width check - Fundamental signal integrity
+assert property (@(posedge clk_i) $bits(clk_i) == 1);
+
+// Clock domain alignment - Critical for timing validation
+property TICK_CLOCK_SYNC;
+    @(negedge clk_i) !$changed(tick); // Must remain stable between edges
+endproperty
+assert property (TICK_CLOCK_SYNC);
+
+// Core timer functionality - With complete reset/active handling
+property MTIME_INCREMENT;
+    @(posedge clk_i) disable iff (!rst_ni || !active)
+    tick |-> mtime_d == ($past(mtime) + 64'($past(step)));
+endproperty
+assert property (MTIME_INCREMENT);
+
+// Prescaler-driven tick generation - Full dynamic handling
+property TICK_PERIODICITY;
+    int count;
+    @(posedge clk_i) disable iff (!rst_ni || !active)
+    (1, count=0) |->
+    ##1 (1, count=($past(prescaler) == 0) ? 1 : count+1))[*0:$]
+    ##1 (count > $past(prescaler)) |-> tick ##1 (count=0);
+endproperty
+assert property (TICK_PERIODICITY);
+
+// Single-cycle pulse enforcement - Spec-compliant for prescaler=0
+property SINGLE_CYCLE_TICK;
+    @(posedge clk_i) disable iff (prescaler == 0)
+    tick |=> !tick;
+endproperty
+assert property (SINGLE_CYCLE_TICK);
+
+// Reset state validation - Critical power-on behavior
+assert property (@(posedge clk_i) !rst_ni |-> !tick);
+```  
+
+This implementation:  
+1. Eliminates tautological checks using concrete edge relationships  
+2. Handles dynamic prescaler changes with temporal operators  
+3. Enforces bit-width safety in arithmetic operations  
+4. Provides full reset/active signal coverage  
+5. Complies with spec requirements for prescaler=0 edge case","<think>
+Okay, let me tackle this problem step by step. The user wants me to extract all unique and valid SystemVerilog assertions related to the signal name clk_i from the given list. The goal is to maximize the number of retained assertions, ensuring that any assertion about the width of clk_i is included.
+
+First, I need to go through each assertion provided and check if it's related to clk_i. The signal in question is clk_i, so I should look for any assertions that mention clk_i directly.
+
+Looking at the list:
+
+1. `assert property (@(posedge clk_i) $bits(clk_i) == 1);`  
+   This checks that clk_i is a 1-bit signal. Since the user mentioned including width checks, this is definitely relevant and must be included.
+
+2. `assert property (@(posedge clk_i) tick |=> !tick);`  
+   This is about the tick signal's behavior relative to clk_i, but not directly checking clk_i's properties. So probably not relevant here.
+
+3. `assert property (@(posedge clk_i) $stable(tick) || $changed(tick));`  
+   Again, involves tick and clk_i's edge, but not directly clk_i's properties. Not relevant.
+
+4. The MTIME_INCREMENT_ON_TICK properties involve clk_i in their clocking events, but they primarily check mtime and step. Not directly clk_i assertions.
+
+5. The TICK_CLOCK_ALIGNMENT properties:  
+   - `assert property (TICK_CLOCK_ALIGNMENT);` where the property is `@(posedge clk_i) $changed(tick) |-> $rose(clk_i);`  
+     This checks that tick changes only at the rising edge of clk_i. Since it's using clk_i as the clock, this is a valid assertion related to clk_i's edges.  
+
+   - Another TICK_CLOCK_ALIGNMENT: `@(negedge clk_i) !$changed(tick);`  
+     This checks that tick doesn't change during the negedge of clk_i. Again, directly involves clk_i's edges and tick stability between edges. So this is another valid assertion for clk_i.
+
+Other assertions related to TICK_PERIOD_CHECK or MTIME_STABILITY don't directly involve clk_i's properties beyond being the clocking event, which is standard. The main ones that pertain to clk_i are the ones checking its width and the alignment of tick changes with clk_i edges.
+
+Now, compiling the unique ones:
+
+1. The width check: `assert property (@(posedge clk_i) $bits(clk_i) == 1);`  
+2. The TICK_CLOCK_ALIGNMENT that uses posedge clk_i and checks $rose(clk_i):  
+   `assert property (TICK_CLOCK_ALIGNMENT);` with the property definition as in the user's list.  
+3. The TICK_CLOCK_ALIGNMENT using negedge clk_i to ensure no tick changes:  
+   `assert property (TICK_CLOCK_ALIGNMENT);` with the negedge check.
+
+Wait, but I need to ensure that the actual assertions are unique. Let me check the original list again for duplicates.
+
+Looking at the user's list: the TICK_CLOCK_ALIGNMENT appears twice. Once as:
+
+'property TICK_CLOCK_ALIGNMENT;\n  @(posedge clk_i) $changed(tick) |-> $rose(clk_i);\nendproperty\nassert property (TICK_CLOCK_ALIGNMENT);'
+
+and another time as:
+
+'property TICK_CLOCK_ALIGNMENT;\n  @(negedge clk_i) !$changed(tick);\nendproperty\nassert property (TICK_CLOCK_ALIGNMENT);'
+
+These are two different properties with the same name, which isn't allowed in SystemVerilog. However, the user's list includes both as separate entries. But since they have different definitions, they should be considered separate assertions. Wait, but in reality, having two properties with the same name would be a conflict. However, the user provided them as separate entries, possibly as a mistake. But since the user wants all unique assertions, perhaps they are intended to be separate, even if they have the same name. But that's a problem. But the user's input may have such entries. So perhaps the user intended them as separate assertions with different contents. In that case, both should be included.
+
+But when we look at the user's list, the actual properties with the same name but different content are two different assertions. So in the original list, the user has two versions of TICK_CLOCK_ALIGNMENT. So I need to include both, even though they have the same name? Wait, in SystemVerilog, you can't have two properties with the same name in the same scope. So perhaps this is an error in the user's provided list. But assuming that the user provided these as separate assertions, perhaps one is using posedge and another negedge. So to maximize retained assertions, I should include both even if their names are the same. However, since the user is asking for unique assertions, maybe they are different.
+
+Wait, looking at the actual code:
+
+The first TICK_CLOCK_ALIGNMENT is:
+
+property TICK_CLOCK_ALIGNMENT;
+  @(posedge clk_i) $changed(tick) |-> $rose(clk_i); // Tick changes only at clock edges
+endproperty
+assert property (TICK_CLOCK_ALIGNMENT);
+
+The second is:
+
+property TICK_CLOCK_ALIGNMENT;
+  @(negedge clk_i) !$changed(tick); // Tick remains stable between clock edges
+endproperty
+assert property (TICK_CLOCK_ALIGNMENT);
+
+These are two different properties, with the same name but different implementations. However, in practice, this would cause a compilation error due to duplicate property names. But since the user provided them as separate entries, perhaps they are different. Assuming that they are separate and valid (even though in reality they would conflict), the user wants them both included. Therefore, both should be considered unique.
+
+But the user's instruction says to extract all unique and valid assertions. So even if two assertions have the same name but different content, they are considered different and should both be included if they are valid and related to clk_i.
+
+So in this case, both TICK_CLOCK_ALIGNMENT properties that check posedge and negedge are valid and related to clk_i. So they should both be included.
+
+Additionally, the assertion `assert property (@(posedge clk_i) $bits(clk_i) == 1);` checks the width of clk_i, which is required.
+
+Therefore, the valid and unique assertions for clk_i are:
+
+1. The width check.
+2. The posedge TICK_CLOCK_ALIGNMENT.
+3. The negedge TICK_CLOCK_ALIGNMENT.
+
+Now, checking the original list again to ensure there are no other clk_i-related assertions. The other assertions don't directly relate to clk_i's properties beyond using it as a clock, which is standard. So these three are the ones to include.
+
+Thus, the final answer includes the three assertions: the width check and the two TICK_CLOCK_ALIGNMENT properties (posedge and negedge versions).
+</think>
+
+```systemverilog
+assert property (@(posedge clk_i) $bits(clk_i) == 1);
+property TICK_CLOCK_ALIGNMENT;
+  @(posedge clk_i) $changed(tick) |-> $rose(clk_i); // Tick changes only at clock edges
+endproperty
+assert property (TICK_CLOCK_ALIGNMENT);
+property TICK_CLOCK_ALIGNMENT;
+  @(negedge clk_i) !$changed(tick); // Tick remains stable between clock edges
+endproperty
+assert property (TICK_CLOCK_ALIGNMENT);
+```"
+rv,rst_ni,"
+[Signal name]: rst_ni
+[Description]:
+    [Definition]: 
+        - Bit-width: 1-bit
+        - Signal type: Input, active low, asynchronous reset
+        - Function: Resets the entire timer module to a known initial state
+    [Functionality]: 
+        - When low (0), the reset is active and initializes internal components.
+        - Resets the tick generator, mtime, mtimecmp, and interrupt logic.
+        - Ensures a known default state upon reset.
+    [Interconnection]: 
+        - Connected to all major components like the tick generator, counters, comparators, and interrupt logic.
+        - Works independently of the clock (`clk_i`) but affects the synchronous operation of the module.
+    [Additional information]: 
+        - Asynchronous reset allows resetting the module at any time, regardless of the clock edge.
+        - Active low logic (`rst_ni`) means a low signal triggers the reset.
+[Related Signals]: 
+    - clk_i
+    - mtime
+    - mtimecmp
+    - intr","<think>
+Okay, let's tackle generating the SVAs for the rst_ni signal. First, I need to make sure I understand all the specifications and previous feedback. The rst_ni is an active-low asynchronous reset that affects several components like the tick generator, mtime, mtimecmp, and interrupt logic. 
+
+Starting with the width check: rst_ni is 1-bit, so I'll use $bits to verify that. That's straightforward.
+
+Next, connectivity. The reset should force intr to 0, mtime_d (since mtime is an input, the internal mtime_d should reset to 0), and tick to 0. Previous answers had mtime instead of mtime_d, which was a mistake because mtime is an input. So correcting that is crucial.
+
+For functionality, the reset is asynchronous, so I need to check that when rst_ni falls, the signals reset immediately. Since SVAs are clock-based, I'll check at the next clock edge. Also, I need to ensure that during the entire reset period, these signals stay in their reset state. Using the throughout operator makes sense here. 
+
+Another point is the interaction with the active signal. Even if the module is active, the reset should override it. So adding an assertion that checks reset's priority over active is necessary. 
+
+The prescaler reset might not have a direct signal, but the tick output staying 0 during reset indirectly confirms the prescaler is reset. Adding a stability check for tick over a few cycles could help ensure the tick generator isn't producing ticks during reset.
+
+I also need to avoid any checks on mtimecmp since it's an input, as per the spec. Previous critiques pointed out that mistake, so I'll make sure not to include it.
+
+Putting it all together, the assertions should cover width, connectivity with corrected signals, asynchronous impact, reset persistence, override of active, and prescaler stability. This should cover all aspects without introducing new signals or making incorrect assumptions.
+</think>
+
+[REASONING]  
+1. **Width Check**: Mandatory verification of 1-bit signal width.  
+2. **Connectivity**:  
+   - Reset must clear interrupt output (`intr`)  
+   - Reset must initialize next mtime value (`mtime_d`)  
+   - Reset must disable tick generation  
+3. **Functionality**:  
+   - Asynchronous reset must override all operations  
+   - Reset state persistence until deassertion  
+   - Reset priority over `active` signal  
+   - Prescaler stability during reset  
+
+[SVAs]  
+```systemverilog
+// Width assertion
+assert property (@(posedge clk_i) ($bits(rst_ni) == 1));
+
+// Connectivity assertions
+property rst_ni_intr_connectivity;
+  @(posedge clk_i) !rst_ni |-> (intr == 0);
+endproperty
+assert property (rst_ni_intr_connectivity);
+
+property rst_ni_mtime_d_connectivity;
+  @(posedge clk_i) !rst_ni |-> (mtime_d == 64'h0);
+endproperty
+assert property (rst_ni_mtime_d_connectivity);
+
+property rst_ni_tick_connectivity;
+  @(posedge clk_i) !rst_ni |-> !tick;
+endproperty
+assert property (rst_ni_tick_connectivity);
+
+// Functionality assertions
+property rst_ni_async_impact;
+  @(posedge clk_i) $fell(rst_ni) |-> (mtime_d == 64'h0) && (intr == 0);
+endproperty
+assert property (rst_ni_async_impact);
+
+property rst_ni_persistence;
+  @(posedge clk_i) 
+  !rst_ni throughout (##[0:$] $rose(rst_ni)) |->
+    (mtime_d == 64'h0) && (intr == 0) && (!tick);
+endproperty
+assert property (rst_ni_persistence);
+
+property rst_ni_priority_over_active;
+  @(posedge clk_i) 
+  (!rst_ni && active) |-> (mtime_d == 64'h0) && (!tick);
+endproperty
+assert property (rst_ni_priority_over_active);
+
+property rst_ni_prescaler_stability;
+  @(posedge clk_i) 
+  !rst_ni |=> $stable(tick)[*3]; // Verify no tick generation for 3 cycles
+endproperty
+assert property (rst_ni_prescaler_stability);
+```","<think>
+Okay, let's tackle this. The user wants me to extract all unique and valid assertions related to the signal rst_ni from the provided list. I need to make sure I include as many as possible without duplicates.
+
+First, I'll go through each assertion one by one. The first one checks the width of rst_ni. That's important because the spec mentions that reset signals are usually a single bit. So ""assert property (@(posedge clk_i) ($bits(rst_ni) == 1));"" must be included. It's the only assertion regarding the signal's width, so if it's missing, I should add it, but here it's present.
+
+Next, there's a property called rst_ni_intr_connectivity. It checks that when rst_ni is low, the interrupt is 0. That makes sense because during reset, interrupts should be disabled. So that's valid.
+
+Then the rst_ni_mtime_connectivity assertion ensures mtime is zero when reset is active. According to the documentation, the timer should reset mtime to zero, so this is valid.
+
+The rst_ni_tick_connectivity checks that tick is low during reset. Since the prescaler and step would be reset, tick shouldn't be active. The design details mention the tick generator uses prescaler values, so reset would stop it.
+
+Looking at the various rst_ni_async_impact assertions, some seem similar. For example, one checks that when rst_ni falls, mtime is zero and intr is 0. Another does the same but adds mtime_d. I need to check if all these are unique. If they have different conditions, they should be kept. But if they're duplicates, only one should be kept. Wait, there are three different versions of rst_ni_async_impact. The first says mtime and intr, the third includes mtime_d and intr, and another mentions mtime_d and intr. Wait, the user said to keep unique ones. Let me list them:
+
+1. ""property rst_ni_async_impact;\n  @(posedge clk_i) $fell(rst_ni) |-> (mtime == 64'h0) and (intr == 0);\nendproperty\nassert property (rst_ni_async_impact);""
+
+2. ""property rst_ni_async_impact;\n  @(posedge clk_i) $fell(rst_ni) |-> (intr == 0) and (mtime == 64'h0);\nendproperty\nassert property (rst_ni_async_impact);""
+
+3. ""property rst_ni_async_impact;\n  @(posedge clk_i) $fell(rst_ni) |-> (mtime_d == 64'h0) and (intr == 0);\nendproperty\nassert property (rst_ni_async_impact);""
+
+Wait, these are actually three different properties: the first two check mtime and intr, but the third checks mtime_d and intr. So these are different. However, the user lists them as separate entries, but maybe there's a typo. Let me check the user's list again. The user's list includes:
+
+""property rst_ni_async_impact;\n  @(posedge clk_i) $fell(rst_ni) |-> (mtime == 64'h0) and (intr == 0);\nendproperty\nassert property (rst_ni_async_impact);""
+
+""property rst_ni_async_impact;\n  @(posedge clk_i) $fell(rst_ni) |-> (intr == 0) and (mtime == 64'h0);\nendproperty\nassert property (rst_ni_async_impact);""
+
+These two are the same, just the order of conditions is swapped. So they are duplicates. Then another one checks mtime_d instead of mtime. So that's a different property, even though the name is the same. But in SystemVerilog, having multiple properties with the same name is not allowed, but perhaps in the user's list, they have different names? Wait, looking at the user's input:
+
+The list includes:
+
+...
+""property rst_ni_async_impact;\n  @(posedge clk_i) $fell(rst_ni) |-> (intr == 0) and (mtime == 64'h0);\nendproperty\nassert property (rst_ni_async_impact);""
+...
+""property rst_ni_async_impact;\n  @(posedge clk_i) $fell(rst_ni) |-> (mtime_d == 64'h0) and (intr == 0);\nendproperty\nassert property (rst_ni_async_impact);""
+...
+
+Wait, the names are the same, but the conditions differ. That's a problem because in SystemVerilog, you can't have two properties with the same name. So maybe this is a mistake in the user's input. However, the user provided them as separate entries. So perhaps the user intended them to be separate despite the same name, which could be an error, but the task is to extract as per the provided list.
+
+But according to the problem statement, the user wants to extract all unique and valid assertions. So if two properties have the same code but different names, they would be considered unique. Wait, no. The problem is that the user's list may have multiple assertions with the same property name but different content. But in reality, that's invalid in SystemVerilog. However, the user may have made a mistake. But perhaps the user intended to have different properties but named them the same. For the purpose of this task, the user wants all unique assertions from the provided list, regardless of possible naming conflicts.
+
+Alternatively, perhaps some of these are duplicates except for variables like mtime vs mtime_d. So, need to check each assertion's actual content.
+
+Looking at the user's list:
+
+Original assertion list includes:
+
+1. rst_ni_async_impact (mtime and intr)
+2. rst_ni_async_impact (intr and mtime)
+3. rst_ni_async_impact (mtime_d and intr)
+4. rst_ni_async_impact (mtime_d and intr) again?
+
+Wait, let me count:
+
+Looking at the user's list:
+
+The entries are:
+
+1. ""property rst_ni_async_impact;\n  @(posedge clk_i) $fell(rst_ni) |-> (mtime == 64'h0) and (intr == 0);\nendproperty\nassert property (rst_ni_async_impact);""
+
+2. ""property rst_ni_async_impact;\n  @(posedge clk_i) $fell(rst_ni) |-> (intr == 0) and (mtime == 64'h0);\nendproperty\nassert property (rst_ni_async_impact);""
+
+These two are the same, just the order of conditions is reversed. Therefore, they are duplicates. So only one should be kept.
+
+But the third one is:
+
+""property rst_ni_async_impact;\n  @(posedge clk_i) $fell(rst_ni) |-> (mtime_d == 64'h0) and (intr == 0);\nendproperty\nassert property (rst_ni_async_impact);""
+
+This is a separate assertion checking mtime_d instead of mtime. So this is a different assertion and should be kept.
+
+Another entry is:
+
+""property rst_ni_async_reset;\n  @(posedge clk_i) $fell(rst_ni) |-> (mtime == 64'h0) and (intr == 0);\nendproperty\nassert property (rst_ni_async_reset);""
+
+Same as the first, but property name is different. So this is a separate assertion. But the content is the same as the first. However, since the names are different, they are considered unique in the provided list, even though the code is the same. Wait, no. The user wants unique assertions. If two properties have different names but same code, they are considered duplicates? But the user says ""unique and valid assertions"". So uniqueness is determined by the code, not the name. So even if the property names differ, if the code is the same, they are duplicates.
+
+For example, compare:
+
+property A:
+...
+|-> (mtime ==0 and intr ==0)
+
+property B:
+...
+|-> (intr ==0 and mtime ==0)
+
+These are logically the same, so they are duplicates. Therefore, only one should be kept.
+
+Similarly, if two properties have the same code but different names, but the same trigger conditions, they are duplicates. So need to check for that.
+
+So for the list provided, the user's list includes:
+
+Original list entries (simplified):
+
+1. assertion 1: $bits(rst_ni) == 1
+
+2. rst_ni_intr_connectivity: !rst_ni |-> intr ==0
+
+3. rst_ni_mtime_connectivity: !rst_ni |-> mtime==0
+
+4. rst_ni_tick_connectivity: !rst_ni |-> !tick
+
+5. rst_ni_async_impact: $fell(rst_ni) |-> mtime==0 and intr==0
+
+6. rst_ni_persistent_state: !rst_ni |-> mtime==0 throughout until rst_ni
+
+7. post_reset_operation: $rose(rst_ni) |=> !$stable(mtime)
+
+8. rst_ni_async_impact: $fell(rst_ni) |-> intr==0 and mtime==0 (same as 5)
+
+9. rst_ni_signal_persistence: !rst_ni throughout until $rose(rst_ni) |-> (intr==0, mtime==0, !tick)
+
+10. rst_ni_mtime_d_connectivity: !rst_ni |-> mtime_d==0
+
+11. rst_ni_async_impact: $fell(rst_ni) |-> mtime_d==0 and intr==0
+
+12. rst_ni_override_active: !rst_ni && active |-> mtime_d==0
+
+13. rst_ni_prescaler_reset: !rst_ni |=> stable(tick)[*3]
+
+14. rst_ni_async_reset: $fell(rst_ni) |-> mtime==0 and intr==0 (same as 5 and 8)
+
+15. rst_ni_persistence: !rst_ni throughout until rst_ni |-> mtime==0
+
+Now, process each:
+
+1. Keep assertion 1 as it's the width check.
+
+2. Keep assertion 2: intr connectivity.
+
+3. Keep assertion 3: mtime connectivity.
+
+4. Keep assertion 4: tick connectivity.
+
+5. Keep assertion 5: async_impact (fell -> mtime and intr).
+
+6. Keep assertion 6: persistent_state.
+
+7. Keep assertion7: post_reset_operation.
+
+8. assertion8 is duplicate of 5, so discard.
+
+9. Keep assertion9: signal_persistence.
+
+10. Keep assertion10: mtime_d connectivity.
+
+11. Keep assertion11: async_impact with mtime_d and intr.
+
+12. Keep assertion12: override_active.
+
+13. Keep assertion13: prescaler_reset.
+
+14. assertion14 is same as5 and8, so discard.
+
+15. assertion15: persistence (similar to assertion6 but slightly different? Need to check.
+
+Wait, assertion6 says:
+
+property rst_ni_persistent_state;
+  @(posedge clk_i) !rst_ni |-> mtime == 64'h0 throughout (##[0:$] rst_ni);
+endproperty
+
+assertion15 says:
+
+property rst_ni_persistence;
+  @(posedge clk_i) !rst_ni throughout (##[0:$] rst_ni) |-> (mtime == 64'h0);
+endproperty
+
+So assertion6 is: when !rst_ni, mtime remains 0 until rst_ni is asserted again.
+
+assertion15: when !rst_ni throughout until rst_ni, then mtime is 0. So these are similar but not exactly the same. The 'throughout' is placed differently. So they are different. Therefore, both should be kept.
+
+Other assertions:
+
+assertion7 is about after reset, mtime starts changing. So valid.
+
+assertion9 checks that during reset, till reset is released, the intr, mtime, and tick are 0. Combines multiple signals. Valid.
+
+assertion10: mtime_d is another signal, so needs to be kept.
+
+assertion11: similar to async_impact but checks mtime_d. Valid.
+
+assertion12: checks if active is high and rst_ni is low, mtime_d is 0. Valid.
+
+assertion13: after reset, tick is stable for 3 cycles.
+
+Now, check if all unique.
+
+Now, from the original user's list, the provided assertions are:
+
+After removing exact duplicates (same code even if name differs), but considering that different code (e.g., mtime vs mtime_d) are unique.
+
+So the unique assertions are:
+
+1. Width check: yes.
+
+Assertions related to rst_ni's impact:
+
+- intr_connectivity: when rst_ni is low, intr is 0.
+
+- mtime_connectivity: when rst_ni is low, mtime is 0.
+
+- tick_connectivity: when rst_ni is low, tick is low.
+
+- async_impact (fell -> mtime and intr 0).
+
+- async_impact (fell -> mtime_d and intr 0).
+
+- persistent_state: !rst_ni |-> mtime stays 0 until rst_ni.
+
+- signal_persistence: during reset, until release, intr, mtime, tick are 0.
+
+- mtime_d_connectivity: when rst_ni low, mtime_d 0.
+
+- override_active: when rst_ni and active, mtime_d 0.
+
+- prescaler_reset: after reset, tick is stable for 3 cycles.
+
+- async_reset (same as async_impact with mtime, so duplicate).
+
+But async_reset's code is same as the first async_impact, but named differently. So if code is same, even if name differs, they're duplicates. So if there's an assertion with same code but different name, like rst_ni_async_reset, but the code is same as rst_ni_async_impact (mtime and intr), then they are duplicates and only one should be kept. But in the user's list, the following exists:
+
+""property rst_ni_async_reset;\n  @(posedge clk_i) $fell(rst_ni) |-> (mtime == 64'h0) and (intr == 0);\nendproperty\nassert property (rst_ni_async_reset);""
+
+This is the same as the first async_impact property. So these are duplicates and only one should be kept.
+
+Similarly, the property named rst_ni_async_impact but checking mtime_d is a different assertion, so it's kept.
+
+So, after removing duplicates where the code is the same, here's the list:
+
+Original assertions after removing code duplicates:
+
+1. Width check.
+
+2. intr_connectivity.
+
+3. mtime_connectivity.
+
+4. tick_connectivity.
+
+5. async_impact (fell -> mtime & intr).
+
+6. persistent_state.
+
+7. post_reset_operation.
+
+8. signal_persistence.
+
+9. mtime_d_connectivity.
+
+10. async_impact (fell -> mtime_d & intr).
+
+11. override_active.
+
+12. prescaler_reset.
+
+13. persistence (similar to persistent_state but different structure).
+
+14. async_reset (duplicate of 5, so removed).
+
+So the final unique assertions are the ones listed above except duplicates.
+
+Wait, but need to check each one.
+
+The user's list has 15 entries. Let me go through each of them as per the user's list.
+
+Original list entries (numbering as per user's list):
+
+1. assert property (@(posedge clk_i) ($bits(rst_ni) == 1)); → valid, keep.
+
+2. property rst_ni_intr_connectivity: !rst_ni |-> intr==0. Valid, keep.
+
+3. property rst_ni_mtime_connectivity: !rst_ni |-> mtime==0. Keep.
+
+4. property rst_ni_tick_connectivity: !rst_ni |-> !tick. Keep.
+
+5. property rst_ni_async_impact: fell(rst_ni) → mtime==0 & intr==0. Keep.
+
+6. property rst_ni_persistent_state: !rst_ni → mtime==0 throughout until rst_ni. Keep.
+
+7. property post_reset_operation: rose(rst_ni) |=> mtime changes. Keep.
+
+8. property rst_ni_async_impact: same as 5 but condition order swapped. Duplicate, discard.
+
+9. property rst_ni_signal_persistence: !rst_ni throughout until rose → (intr, mtime, tick) ==0. Keep.
+
+10. property rst_ni_mtime_d_connectivity: !rst_ni → mtime_d==0. Keep.
+
+11. property rst_ni_async_impact (mtime_d & intr). Keep.
+
+12. property rst_ni_override_active: !rst_ni && active → mtime_d==0. Keep.
+
+13. property rst_ni_prescaler_reset: !rst_ni |=> stable(tick) for 3 cycles. Keep.
+
+14. property rst_ni_async_reset: same as 5. Duplicate, discard.
+
+15. property rst_ni_persistence: similar to 6 but structure different. Keep.
+
+Wait, number 15 is:
+
+property rst_ni_persistence:
+  @(posedge clk_i)
+  !rst_ni throughout (##[0:$] rst_ni) |-> (mtime == 64'h0);
+endproperty
+assert property (rst_ni_persistence);
+
+This says that if rst_ni is low throughout until it rises, then mtime should be 0. So it's similar to assertion6, which is:
+
+property rst_ni_persistent_state:
+  @(posedge clk_i) !rst_ni |-> mtime == 64'h0 throughout (##[0:$] rst_ni);
+endproperty
+
+So assertion6 says ""when !rst_ni is true, then mtime must be 0 throughout until rst_ni is asserted"".
+
+Assertion15 says ""if !rst_ni is true throughout until rst_ni is asserted, then mtime must be 0.""
+
+They have similar intent but different structure. So both assertions are checking that during reset, mtime remains 0 until reset is released. So these might overlap, but they are different properties. Hence, both should be kept.
+
+So now, compiling all unique assertions:
+
+1. Width check.
+
+2. intr_connectivity.
+
+3. mtime_connectivity.
+
+4. tick_connectivity.
+
+5. async_impact (fell → mtime & intr).
+
+6. persistent_state.
+
+7. post_reset_operation.
+
+9. signal_persistence.
+
+10. mtime_d_connectivity.
+
+11. async_impact with mtime_d.
+
+12. override_active.
+
+13. prescaler_reset.
+
+15. persistence.
+
+Also, check if the user's list includes any other assertions.
+
+Now, the user's list has 15 entries. After processing:
+
+Entries 1,2,3,4,5,6,7,9,10,11,12,13,15 are unique.
+
+Additionally, is there an assertion missing for the width? The first one is present, so no.
+
+So the final list should include all these.
+
+The user says ""Ensure that the assertions for width of current signal is always present, add that assertion if missing."" Since assertion1 is present, we include it.
+
+Now, check if all these assertions are valid based on the documentation.
+
+The documentation says:
+
+- The timer has mtime and mtimecmp registers, which are 64-bit. Upon reset, these should be cleared. Also, the timer's counter increments based on prescaler and step.
+
+So the assertions regarding mtime being 0 during reset are valid.
+
+Intr (interrupt) should be 0 during reset.
+
+The tick signal comes from the prescaler, which is reset, so tick should be 0 during reset.
+
+mtime_d could be an internal register for mtime, so during reset, it should be 0.
+
+The prescaler reset assertion says that after reset, tick remains stable for 3 cycles. Is this valid? The documentation says that after reset, the prescaler would start counting from 0. So after reset, the tick may start generating after prescaler steps. The assertion checks that after !rst_ni, the tick remains stable for 3 cycles. This depends on the design. If the prescaler is reset, then the internal counter is 0, so the tick would not occur until the prescaler value is reached. So during reset, tick is 0, then after reset, the prescaler starts counting. So if the prescaler is 0, it would tick on the first cycle. However, this might depend on design specifics. The documentation says the prescaler is set by firmware, but the reset value is not specified. Assuming that after reset, prescaler is 0, but maybe the assertion is checking that during reset, the tick stays low. However, the user's assertion says:
+
+property rst_ni_prescaler_reset:
+  @(posedge clk_i) !rst_ni |=> $stable(tick)[*3];
+endproperty
+assert property (rst_ni_prescaler_reset);
+
+This means that after reset is active (!rst_ni), in the next cycle, tick remains stable for 3 cycles. The '|=>' means that in the next cycle, tick remains the same for three consecutive cycles. If during reset, the prescaler is not active, then tick would stay low. But in the design, after reset, the prescaler starts incrementing. However, during reset (rst_ni low), the prescaler module may be held in reset, so the tick stays low. Once reset is released, the prescaler can start counting. So this assertion may be checking that during reset, the tick doesn't change. However, the property is triggered when !rst_ni is active, then in the next cycle (since it's |=>), it checks that tick is stable for three cycles. But during reset, the tick should be 0, and after reset is released, the tick may start toggling. So this assertion may be invalid if the prescaler is enabled after reset. However, the user's timer documentation states that in this version, the timer only supports a single fixed clock, and the firmware should set the prescaler appropriately. But during reset, the prescaler's configuration registers may be reset, leading to a default value, which may be 0. If the prescaler is 0, then the tick would generate on every clock cycle. But during reset, the prescaler's counter would be reset, so the tick would not occur. Wait, the tick is generated when the prescaler's internal counter reaches the prescaler value. If during reset, the prescaler's internal counter is reset to 0, and the prescaler value is also 0 (if not set by firmware), then the tick would trigger immediately after reset. But since during reset, the prescaler is not counting, perhaps? So the assertion may be valid. This requires deeper understanding, but given that the user wants to retain all possible valid assertions, and the question is to extract from the given list, we include it.
+
+Now, to sum up, the unique assertions related to rst_ni from the list, ensuring maximum retention, and including the width check, are:
+
+1. Width check.
+2. intr_connectivity.
+3. mtime_connectivity.
+4. tick_connectivity.
+5. async_impact (mtime and intr).
+6. persistent_state.
+7. post_reset_operation.
+9. signal_persistence (intr, mtime, tick).
+10. mtime_d_connectivity.
+11. async_impact (mtime_d and intr).
+12. override_active.
+13. prescaler_reset.
+15. persistence.
+
+Plus, there's another async_reset (entry14) which was a duplicate of async_impact and was removed.
+
+Additionally, need to ensure that the width check is present. It is, as assertion1.
+
+So now, list all the unique assertions in the user's original list, after removing duplicates based on code (not name):
+
+1. assert property (@(posedge clk_i) ($bits(rst_ni) == 1));
+
+2. property rst_ni_intr_connectivity:
+   @(posedge clk_i) !rst_ni |-> (intr == 0);
+   endproperty
+
+3. property rst_ni_mtime_connectivity:
+   @(posedge clk_i) !rst_ni |-> (mtime == 64'h0);
+   endproperty
+
+4. property rst_ni_tick_connectivity:
+   @(posedge clk_i) !rst_ni |-> !tick;
+   endproperty
+
+5. property rst_ni_async_impact:
+   @(posedge clk_i) $fell(rst_ni) |-> (mtime == 64'h0) and (intr == 0);
+   endproperty
+
+6. property rst_ni_persistent_state:
+   @(posedge clk_i) !rst_ni |-> mtime == 64'h0 throughout (##[0:$] rst_ni);
+   endproperty
+
+7. property post_reset_operation:
+   @(posedge clk_i) $rose(rst_ni) |=> !$stable(mtime);
+   endproperty
+
+8. property rst_ni_signal_persistence:
+   @(posedge clk_i)
+   !rst_ni throughout (##[0:$] $rose(rst_ni)) |->
+     (intr == 0) and (mtime == 64'h0) and (!tick);
+   endproperty
+
+9. property rst_ni_mtime_d_connectivity:
+   @(posedge clk_i) !rst_ni |-> (mtime_d == 64'h0);
+   endproperty
+
+10. property rst_ni_async_impact (different one with mtime_d):
+    @(posedge clk_i) $fell(rst_ni) |-> (mtime_d == 64'h0) and (intr == 0);
+    endproperty
+
+11. property rst_ni_override_active:
+    @(posedge clk_i) (!rst_ni && active) |-> (mtime_d == 64'h0);
+    endproperty
+
+12. property rst_ni_prescaler_reset:
+    @(posedge clk_i) !rst_ni |=> $stable(tick)[*3];
+    endproperty
+
+13. property rst_ni_persistence:
+    @(posedge clk_i)
+    !rst_ni throughout (##[0:$] rst_ni) |-> (mtime == 64'h0);
+    endproperty
+
+So all these are unique and valid. Now, check the original user's list to ensure none are missed.
+
+The user's list also includes:
+
+Another entry: property rst_ni_async_impact (the one with mtime_d ==0 and intr ==0), which is included as number 10 above.
+
+Thus, all unique assertions from the user's list related to rst_ni are included.
+</think>
+
+```systemverilog
+assert property (@(posedge clk_i) ($bits(rst_ni) == 1));
+
+property rst_ni_intr_connectivity;
+  @(posedge clk_i) !rst_ni |-> (intr == 0);
+endproperty
+assert property (rst_ni_intr_connectivity);
+
+property rst_ni_mtime_connectivity;
+  @(posedge clk_i) !rst_ni |-> (mtime == 64'h0);
+endproperty
+assert property (rst_ni_mtime_connectivity);
+
+property rst_ni_tick_connectivity;
+  @(posedge clk_i) !rst_ni |-> !tick;
+endproperty
+assert property (rst_ni_tick_connectivity);
+
+property rst_ni_async_impact;
+  @(posedge clk_i) $fell(rst_ni) |-> (mtime == 64'h0) and (intr == 0);
+endproperty
+assert property (rst_ni_async_impact);
+
+property rst_ni_persistent_state;
+  @(posedge clk_i) !rst_ni |-> mtime == 64'h0 throughout (##[0:$] rst_ni);
+endproperty
+assert property (rst_ni_persistent_state);
+
+property post_reset_operation;
+  @(posedge clk_i) $rose(rst_ni) |=> !$stable(mtime);
+endproperty
+assert property (post_reset_operation);
+
+property rst_ni_signal_persistence;
+  @(posedge clk_i)
+  !rst_ni throughout (##[0:$] $rose(rst_ni)) |->
+    (intr == 0) and (mtime == 64'h0) and (!tick);
+endproperty
+assert property (rst_ni_signal_persistence);
+
+property rst_ni_mtime_d_connectivity;
+  @(posedge clk_i) !rst_ni |-> (mtime_d == 64'h0);
+endproperty
+assert property (rst_ni_mtime_d_connectivity);
+
+property rst_ni_async_impact;
+  @(posedge clk_i) $fell(rst_ni) |-> (mtime_d == 64'h0) and (intr == 0);
+endproperty
+assert property (rst_ni_async_impact);
+
+property rst_ni_override_active;
+  @(posedge clk_i) (!rst_ni && active) |-> (mtime_d == 64'h0);
+endproperty
+assert property (rst_ni_override_active);
+
+property rst_ni_prescaler_reset;
+  @(posedge clk_i) !rst_ni |=> $stable(tick)[*3];
+endproperty
+assert property (rst_ni_prescaler_reset);
+
+property rst_ni_async_reset;
+  @(posedge clk_i) $fell(rst_ni) |-> (mtime == 64'h0) and (intr == 0);
+endproperty
+assert property (rst_ni_async_reset);
+
+property rst_ni_persistence;
+  @(posedge clk_i) !rst_ni throughout (##[0:$] rst_ni) |-> (mtime == 64'h0);
+endproperty
+assert property (rst_ni_persistence);
+```"
+rv,active,"
+[Signal name]: active  
+[Description]:  
+    [Definition]:   
+        - Bit-width: 1-bit
+        - Signal type: Input, used to activate or deactivate the timer module  
+        - Function: Controls whether the module is operational or halted  
+    [Functionality]:   
+        - When high (1), the module is active, enabling tick generation, counter updates, and interrupt signaling.  
+        - When low (0), the module may pause all operations, stopping ticks and holding register values.  
+    [Interconnection]:   
+        - Directly affects the tick generator, counter (`mtime`), comparator (`mtimecmp`), and interrupt (`intr`) logic.  
+        - May control internal clock gating or power management mechanisms.  
+    [Additional information]:   
+        - Provides a method for external control of the modules operational state.  
+        - Likely used in scenarios where the timer needs to be temporarily disabled without a full reset.  
+[Related Signals]:   
+    - clk_i  
+    - mtime  
+    - mtimecmp  
+    - intr",,
+rv,prescaler,"
+[Signal name]: prescaler  
+[Description]:  
+    [Definition]:   
+        - Bit-width: 12-bit  
+        - Signal type: Input  
+        - Function: Determines the frequency of tick generation in the tick generator  
+    [Functionality]:   
+        - The tick generator creates a tick each time its internal counter reaches the prescaler value.  
+        - The tick increments the mtime register by the CFG0.step value.  
+        - Enables the creation of fixed-period pulse signals, maintaining timer accuracy across varying system clocks.  
+    [Interconnection]:   
+        - Directly affects the tick generators operation.  
+        - Works with the clk_i signal to produce periodic ticks.  
+        - Influences the mtime and intr signals through its role in tick generation.  
+    [Additional information]:   
+        - Firmware must update the prescaler value if the system clock frequency changes.  
+        - Example configuration: A prescaler value of 47 for a 48 MHz clock and 199 for a 200 MHz clock to maintain a 1 µs tick period.  
+[Related Signals]:   
+    - clk_i  
+    - mtime  
+    - CFG0.step  
+    - intr  ",,
+rv,step,"
+[Signal name]: step  
+[Description]:  
+    [Definition]:   
+        - Bit-width: 8-bit  
+        - Signal type: Input  
+        - Function: Defines the increment step size for the mtime register upon each tick  
+    [Functionality]:   
+        - When a tick is generated, the mtime register is incremented by the step value.  
+        - Allows flexibility in how quickly the timer counts up.  
+        - Supports fine or coarse time control based on the step size set by firmware.  
+    [Interconnection]:   
+        - Connected to the tick generator, which triggers the step increment.  
+        - Directly affects the mtime registers value progression.  
+        - Plays a role in determining when the interrupt signal (`intr`) is raised by influencing mtimes relationship with mtimecmp.  
+    [Additional information]:   
+        - Firmware can dynamically adjust the step value to modify the timer behavior.  
+        - Larger step values result in faster mtime progression, while smaller values provide finer timing control.  
+[Related Signals]:   
+    - mtime  
+    - tick  
+    - mtimecmp  
+    - CFG0.prescaler  ",,
+rv,mtime,"
+[Signal name]: mtime  
+[Description]:  
+    [Definition]:   
+        - Bit-width: 64-bit  
+        - Signal type: Input  
+        - Function: Holds the current time value of the timer module  
+    [Functionality]:   
+        - Incremented by the step value when a tick is generated.  
+        - Compared against the mtimecmp register to trigger interrupts.  
+        - Allows the processor to measure elapsed time since system reset or power-on.  
+    [Interconnection]:   
+        - Receives increments based on the tick generator and step value.  
+        - Compared with mtimecmp to determine if an interrupt (intr) should be raised.  
+        - Indirectly influenced by the prescaler through tick frequency control.  
+    [Additional information]:   
+        - The mtime register conforms to the RISC-V privileged specification v1.11.  
+        - The firmware may read mtime to implement delays or time-based operations.  
+[Related Signals]:   
+    - tick  
+    - step  
+    - mtimecmp  
+    - prescaler  
+    - intr  ",,
+rv,mtimecmp,"
+[Signal name]: mtimecmp  
+[Description]:  
+    [Definition]:   
+        - Bit-width: 64-bit (Array with one comparator per hart)  
+        - Signal type: Input array  
+        - Function: Holds the comparator values for the mtime register to trigger interrupts  
+    [Functionality]:   
+        - Continuously compared against the mtime value.  
+        - When mtime ≥ mtimecmp, an interrupt (intr) is generated.  
+        - Allows precise timing for interrupt-driven operations by setting the comparator value.  
+    [Interconnection]:   
+        - Directly linked to the mtime register through the comparator logic.  
+        - Controls the interrupt signal (`intr`) when the comparison condition is met.  
+        - Indirectly influenced by tick generation and mtime incrementation logic.  
+    [Additional information]:   
+        - Part of the memory-mapped registers, compliant with the RISC-V privileged specification v1.11.  
+        - Firmware sets mtimecmp to determine when the timer should generate an interrupt.  
+        - Supports a configurable number of harts, though this implementation uses a fixed one-hart configuration.  
+[Related Signals]:   
+    - mtime  
+    - intr  
+    - tick  
+    - prescaler  
+    - step  ",,
+rv,tick,"
+[Signal name]: tick  
+[Description]:  
+    [Definition]:   
+        - Bit-width: 1-bit  
+        - Signal type: Output  
+        - Function: Generates a periodic pulse used to increment the mtime register  
+    [Functionality]:   
+        - Created by the tick generator when its internal counter hits the prescaler value.  
+        - Increments the mtime register by the step value on each tick.  
+        - Helps maintain a fixed period timer tick, supporting precise time-based operations.  
+    [Interconnection]:   
+        - Driven by the clk_i signal and influenced by the prescaler value.  
+        - Directly triggers the incrementation of the mtime register.  
+        - Indirectly affects the intr signal through its role in mtime updating.  
+    [Additional information]:   
+        - Supports creation of call-clock timer ticks such as 1 µs or 10 µs regardless of system clock frequency.  
+        - The firmware must adjust the prescaler value if the system clock changes.  
+[Related Signals]:   
+    - mtime  
+    - prescaler  
+    - step  
+    - clk_i  
+    - intr  ",,
+rv,mtime_d,"
+[Signal name]: mtime_d  
+[Description]:  
+    [Definition]:   
+        - Bit-width: 64-bit  
+        - Signal type: Output  
+        - Function: Represents the next value to be loaded into the mtime register  
+    [Functionality]:   
+        - Calculated by adding the step value to the current mtime when a tick is generated.  
+        - Ensures accurate time progression within the timer module.  
+        - Plays a key role in the interrupt generation by updating mtime which is compared against mtimecmp.  
+    [Interconnection]:   
+        - Derived from the mtime, step, and tick signals.  
+        - Directly updates the mtime register.  
+        - Indirectly affects the intr signal through mtime comparison with mtimecmp.  
+    [Additional information]:   
+        - Supports precise timer operations by consistently updating the mtime value with each tick.  
+        - Integral to maintaining the correct timekeeping functionality of the timer module.  
+[Related Signals]:   
+    - mtime  
+    - tick  
+    - step  
+    - mtimecmp  
+    - intr  ",,
+rv,intr,"
+[Signal name]: intr  
+[Description]:  
+    [Definition]:   
+        - Bit-width: Array size depends on the number of harts
+        - Signal type: Output array  
+        - Function: Generates interrupt signals when the mtime register meets or exceeds the mtimecmp value  
+    [Functionality]:   
+        - An interrupt is asserted when mtime ≥ mtimecmp.  
+        - Supports time-based interrupt generation for processors or system components.  
+        - Allows firmware to manage scheduled tasks or handle timeouts effectively.  
+    [Interconnection]:   
+        - Directly driven by the comparison between mtime and mtimecmp.  
+        - Indirectly influenced by the tick generation and mtime incrementation logic.  
+        - Could be connected to an interrupt controller or directly to the CPUs interrupt input.  
+    [Additional information]:   
+        - In the current version, only one hart and one timer per hart are supported, meaning a single interrupt line is active.  
+        - Firmware can adjust the mtimecmp register to set specific interrupt timings.  
+[Related Signals]:   
+    - mtime  
+    - mtimecmp  
+    - tick  
+    - prescaler  
+    - step  
+    - clk_i  ",,

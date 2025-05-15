@@ -1,0 +1,497 @@
+<think>
+Okay, I need to extract all unique and valid assertions related to the signal mtime_d from the given list. Let's go through each assertion one by one and check which ones mention mtime_d.
+
+First, the user wants assertions for mtime_d, so I'll filter out any that don't involve this signal. Also, need to ensure they are valid based on the documentation.
+
+Looking at the list:
+
+1. The first assertion checks that mtime_d is 64 bits when rst_ni and active are high. This is about the width, so definitely relevant.
+2. The second says if reset is low, mtime_d should be 0. Valid as per reset behavior.
+3. Third assertion checks mtime_d's width is always 64. Important to include for width.
+4. The next few mention mtime_d in their properties, like mtime_d_tick_connectivity. These check that on a tick, mtime_d equals mtime plus step. That's valid.
+5. Another checks that when there's no tick, mtime_d equals mtime. Also valid.
+6. There's an assertion about mtime being the past value of mtime_d. This relates to how mtime updates from mtime_d, so relevant.
+7. Some assertions handle step carry or zero extension. For example, step_zero_extension checks that upper bits are same when step is added. But step is an 8-bit register, adding to lower 8 bits. So if step is added, the upper 56 bits (63:8) should be mtime's upper plus any carry from lower. Wait, but the documentation says step is 8-bit. So when step is added, mtime increments by the step value stored in the 8-bit register. So adding as an 8-bit value to mtime. So the assertion that mtime_d is mtime + step with step zero-extended might be correct. But need to see.
+
+Other assertions like 'safe_addition' checks mtime_d is mtime plus 64-bit unsigned step. Since step is 8-bit, but in SystemVerilog, adding an 8-bit to 64-bit would zero-extend, so that's valid. So that assertion is okay.
+
+Some assertions might be duplicates. For example, mtime_tick_connection and mtime_d_connectivity_tick seem similar. Check their code:
+
+mtime_tick_connection: (tick |-> (mtime_d == (mtime + step)))
+mtime_d_connectivity_tick: same condition. So these are duplicates. But need to check the exact wording. Wait, looking at the user's list:
+
+Looking at the list entries:
+
+The assertion 'mtime_tick_connection' is:
+(tick |-> (mtime_d == (mtime + step)))
+
+Similarly, 'mtime_d_connectivity_tick' is:
+tick |-> (mtime_d == (mtime + step))
+
+These are the same, so they are duplicates. So only need one.
+
+Similarly, mtime_stable_connection and no_tick_stability both check that without tick, mtime_d stays same. Also, mtime_d_notick_connectivity is same.
+
+Looking at the exact properties:
+
+mtime_d_notick_connectivity: (!tick |-> (mtime_d == mtime))
+mtime_stable_connection: (!tick |-> (mtime_d == mtime))
+no_tick_stability: (!tick |-> (mtime_d == mtime))
+These are the same, so keep one.
+
+Also, check for reset conditions. The second assertion is !rst_ni |-> mtime_d ==0. Another assertion reset_init says $rose(rst_ni) implies mtime_d is 0. Wait, $rose(rst_ni) means reset is deasserted. So that might not be the same. Wait, the reset is active low. So if $fell(rst_ni) means reset is asserted (active low), then when reset is low (rst_ni is 0), the mtime_d should be 0. The second assertion says !rst_ni |-> mtime_d ==0, which is correct. The 'reset_init' assertion says when $rose(rst_ni) (so reset is deasserted, transitioning from low to high) then next cycle mtime_d is 0. But according to the doc, on reset, mtime_d should be 0. But if the reset is deasserted, maybe mtime_d starts at 0. Wait, the documentation says that the timer's mtime is compared to mtimecmp. At reset, mtime should be 0. The second assertion checks that when !rst_ni (reset active), mtime_d is 0. Also the 'reset_initialization' property says when $fell(rst_ni) (reset is asserted), then implies mtime_d is 0. But the original assertion 2 is more straightforward: whenever reset is low, mtime_d is 0.
+
+Another assertion 'reset_initialization' is a bit different. Let me check the code:
+
+"property reset_initialization;\n  @(posedge clk_i)\n  $fell(rst_ni) |-> ##1 (rst_ni implies (mtime_d == 64'h0));\nendproperty\nassert property (reset_initialization);"
+
+$fell(rst_ni) means rst_ni transitions to 0 (reset is being asserted). Then, in the next cycle, if rst_ni is high (which would be after reset is deasserted?), it checks mtime_d is 0. This seems a bit unclear. Maybe the correct reset behavior is captured in assertion 2: whenever reset is low, mtime_d is 0. So assertion 2 and the reset_init might have different conditions. Need to check which are valid.
+
+The documentation says that the timer doesn't support low-power modes, and assumes clock is running. But the reset behavior: upon reset (active low), mtime_d should be 0. So assertion 2: !rst_ni |-> mtime_d ==0 is correct. The reset_init property might not be correct because $rose(rst_ni) is when reset is deasserted, and then next cycle mtime_d is 0. But after reset deassertion, the timer should start counting. So maybe the reset_init assertion is incorrect. However, according to the provided assertions, the user included "assert property (@(posedge clk_i) !rst_ni |-> mtime_d == 64'h0);", which is valid.
+
+Now for the step_zero_extension: one version uses mtime_d[63:8] == mtime[63:8], another adds step as {{56{1'b0}}, step}. The documentation says step is 8-bit. So when step is added, the lower 8 bits are incremented by step, and any carry propagates. So the assertion that step is zero-extended to 64 bits (i.e., step is added as 8-bit, upper bits 63:8 are incremented by any carry from lower bits) seems necessary. But there are two versions:
+
+Original assertions:
+
+step_zero_extension (version 1):
+(tick |-> (mtime_d[63:8] == mtime[63:8]))
+
+step_zero_extension (version 2):
+mtime_d == (mtime + {{56{1'b0}}, step})
+
+These are different. The first checks upper 56 bits are same, implying no carry. But if the lower 8 bits of mtime plus step exceed 255, there should be a carry, which would increment the upper bits. So the first version is incorrect. The second version is correct, as it zero-extends the 8-bit step to 64 bits (by padding 56 zeros), then adds to mtime. But according to the documentation, step is an 8-bit register, so adding step (8 bits) to mtime (64 bits) would indeed require zero-extension. So the correct assertion is that mtime_d equals mtime plus the zero-extended step. So the second version of step_zero_extension is correct. The first version (checking upper bits) is only valid if step is less than 256 and there is no carry, which isn't always the case. Therefore, the step_zero_extension assertion that uses zero-extension is valid.
+
+Similarly, the safe_addition assertion checks that step is cast to 64-bit unsigned, which is equivalent to zero-extension. So that's the same as the second step_zero_extension.
+
+So between the two step_zero_extension properties and safe_addition, which ones are correct and should be included.
+
+Looking at the user-provided list, the first step_zero_extension is:
+
+property step_zero_extension;
+  @(posedge clk_i)
+  (rst_ni && active) |-> (tick |-> (mtime_d[63:8] == mtime[63:8]));
+endproperty
+
+But according to the documentation, step is 8-bit. So when adding step to mtime, which is 64-bit, the lower 8 bits (7:0) of mtime would be increased by step. If that addition overflows (e.g., mtime[7:0] = 0xFF and step is 0x01), then the next value would be 0x100, so mtime_d[7:0] would be 0x00 and mtime_d[15:8] would increase by 1. Therefore, mtime_d[63:8] should not be the same as mtime[63:8] in this case. Hence, the first step_zero_extension assertion is incorrect. The second version (which adds the zero-extended step) is correct.
+
+But looking at the user's list, there are two different step_zero_extension assertions. Let me check:
+
+The first is:
+
+property step_zero_extension;
+  @(posedge clk_i)
+  (rst_ni && active) |-> (tick |-> (mtime_d[63:8] == mtime[63:8]));
+endproperty
+
+The second is:
+
+property step_zero_extension;
+  @(posedge clk_i)
+  (rst_ni && active && tick) |-> 
+    mtime_d == (mtime + {{56{1'b0}}, step});
+endproperty
+
+The second version is correct. So the user has two different assertions with the same name but different content. This might be an error. But since the user is providing a list of different assertions, each entry is a separate assertion. Looking at the user's list, the two step_zero_extension properties have different code. Therefore, they are separate entries and must be considered unique. However, since they have the same name, but different content, perhaps the user intended to have both. However, in SystemVerilog, having two properties with the same name would be a conflict. But since the user provides a list of assertions, we can consider them as different ones, perhaps with different names. Wait, looking at the user's list entries, the first occurrence is:
+
+'property step_zero_extension;\n  @(posedge clk_i)\n  (rst_ni && active) |-> (tick |-> (mtime_d[63:8] == mtime[63:8]));\nendproperty\nassert property (step_zero_extension);'
+
+Another is:
+
+"property step_zero_extension;\n  @(posedge clk_i)\n  (rst_ni && active && tick) |-> \n    mtime_d == (mtime + {{56{1'b0}}, step});\nendproperty\nassert property (step_zero_extension);"
+
+These are two different properties with the same name. But in practice, you can't have two properties with the same name in the same scope. But since the user has a list, perhaps they are separate. However, the user is asking for unique assertions, so I need to look for unique properties regardless of their name.
+
+But in the user's input, the step_zero_extension name is used twice with different conditions. But since the actual assertion code is different, they are different assertions. So which one is valid? The first (checking upper bits) is invalid, as it doesn't account for carry. The second (adding with zero-extension) is valid. Therefore, only the second one should be retained, and the first should be discarded.
+
+Thus, among the step-related assertions, the correct ones are:
+
+- safe_addition: mtime_d == mtime + 64'(unsigned'(step))
+- step_zero_extension (second version) where step is zero-extended.
+
+But these might be the same. Let's see:
+
+Adding 64'(unsigned'(step)) would zero-extend the 8-bit step to 64 bits. So if step is 8 bits, then adding {{56{1'b0}}, step} is same as zero-extension. Therefore, safe_addition and the second step_zero_extension are the same. So we can consider them duplicates and retain one.
+
+Looking at the user's list entries:
+
+The safe_addition assertion is:
+
+"property safe_addition;\n  @(posedge clk_i)\n  (rst_ni && active && tick) |-> \n    mtime_d == (mtime + 64'(unsigned'(step)));\nendproperty\nassert property (safe_addition);"
+
+The second step_zero_extension is:
+
+"property step_zero_extension;\n  @(posedge clk_i)\n  (rst_ni && active && tick) |-> \n    mtime_d == (mtime + {{56{1'b0}}, step});\nendproperty\nassert property (step_zero_extension);"
+
+These are equivalent because 64'(unsigned'(step)) when step is 8 bits would zero-extend to 64 bits, which is the same as {{56{1'b0}}, step}.
+
+Therefore, these two assertions are duplicates in effect and can be considered duplicates, so we only need one.
+
+Now, considering all, the valid assertions related to mtime_d are:
+
+1. Width assertions: Check that mtime_d is 64 bits. Two assertions in the list are for this:
+
+- 'assert property (@(posedge clk_i) \n  (rst_ni && active) |-> ($bits(mtime_d) == 64));'
+- 'assert property (@(posedge clk_i) $bits(mtime_d) == 64);'
+
+The second one is unconditional and checks that mtime_d is always 64 bits, which is better. So we should include this.
+
+2. Reset assertion: When reset is low (!rst_ni), mtime_d is 0. The second assertion in the list is: "assert property (@(posedge clk_i) !rst_ni |-> mtime_d == 64'h0);"
+
+3. On tick, mtime_d increments by step (zero-extended). The valid assertions here are:
+
+- 'property safe_addition;\n ... mtime_d == (mtime + 64'(unsigned'(step)));'
+- 'property mtime_tick_connection; ... tick |-> (mtime_d == (mtime + step))'
+   But since step is 8-bit, adding step (as a 64-bit number via zero-extension) is correct. However, if the step variable in the code is defined as 64-bit, then adding step directly is okay. But according to the documentation, step is an 8-bit register. Therefore, in the RTL, step is 8 bits, and when added to mtime (64 bits), it must be zero-extended. Thus, the correct assertion is the one that uses the zero-extended step. So the safe_addition and step_zero_extension (second version) are correct. But in the user's list, the mtime_tick_connection adds step directly. But if step is 8-bit, adding it to mtime (64-bit) would involve automatic zero-extension. So in SystemVerilog, if step is 8 bits and mtime is 64 bits, then mtime + step would automatically zero-extend step. Therefore, the mtime_tick_connection assertion is correct. However, if the step is stored as a 64-bit value, but only the lower 8 bits are used, then the assertions would differ. But according to the documentation, step is an 8-bit register, so it's likely that in the RTL, step is 8 bits. Therefore, the correct code would have step zero-extended when added to mtime. So the mtime_tick_connection assertion is valid only if step is 64 bits. Wait, but in the user's code, maybe step is 8 bits, so adding step (8-bit) to mtime (64-bit) would result in a 64-bit value. Therefore, the assertion (tick |-> mtime_d == mtime + step) is correct in this scenario. Because step is 8 bits, but when added to 64-bit mtime, it's automatically zero-extended. So the mtime_tick_connection assertion is correct.
+
+But to be explicit, the step_zero_extension assertion (second version) ensures that step is zero-extended. Since both assertions are present, which one is correct?
+
+If step is an 8-bit signal, then in the RTL code, when you write mtime + step, Verilog automatically expands step to 64 bits by padding with zeros. Therefore, the two assertions (mtime + step and mtime + {{56{1'b0}}, step}) are equivalent. Therefore, both assertions are redundant. But according to the user's list, they are different entries. So need to check if both are present. In the user's list, there are multiple assertions that are similar. The user says to maximize retained assertions, so even if they are duplicates, we need to include all unique ones. But perhaps some are redundant. However, to maximize, we need to retain all unique ones, even if they are the same in effect.
+
+But looking at the exact code:
+
+safe_addition: mtime_d == (mtime + 64'(unsigned'(step)))
+
+step_zero_extension (second version): mtime_d == (mtime + {{56{1'b0}}, step})
+
+These are equivalent if step is 8 bits. So they are the same and should be considered duplicates. But since the user lists them as separate assertions, perhaps we need to include both.
+
+But the user's instruction says "extract all unique and valid assertions". So if two assertions are semantically the same but written differently, should they be considered unique? For example, if two assertions check the same condition but have different names or slightly different code, but same logic. The user says to "maximise the number of retained assertions", so perhaps even if they seem duplicates, retain them.
+
+But in this case, the step_zero_extension and safe_addition are different in code but same in effect. So to maximize retained assertions, we should include both, even if they're duplicates, as they are written differently. However, the user's instruction says "unique" assertions, so we need to eliminate duplicates. So in this case, if two assertions are different in code but same in meaning, they are not unique. So only include one.
+
+However, how to determine if two assertions are the same?
+
+Alternatively, the user might have intended to include all assertions that mention mtime_d in the code, even if they are duplicates, provided their code is different. But given the user's instruction, perhaps the goal is to collect all assertions that check different aspects of mtime_d, even if some overlap.
+
+But to follow instructions correctly: Extract all unique and valid assertions. Unique here probably means that the assertion code is different, so even if they are checking the same condition, if written differently, they are considered unique. But that's unlikely. The term "unique" here likely refers to unique in their effect or code. So we need to remove exact duplicates.
+
+Looking at the user's list. For example, the first assertion is:
+
+assert property (@(posedge clk_i) (rst_ni && active) |-> ($bits(mtime_d) == 64));
+
+And the third is:
+
+assert property (@(posedge clk_i) $bits(mtime_d) == 64);
+
+These are different. The first only checks when rst_ni and active are true. The third checks always. The third is more general. Therefore, the third assertion is better as it checks the width under all conditions, which is more comprehensive. So we need to retain both? Or just the third? According to the user's instruction, we need to include width assertion if missing. The user says: "Ensure that the assertions for width of current signal is always present, add that assertion if missing." So in case any width assertion is missing, add it. But here, two are present. Since the third assertion is an unconditional check, it's better, but the first might be redundant. But to follow instructions, perhaps include both. But the user says to extract all unique and valid, so if they are valid, both should be included. But the first one checks the width only when rst_ni and active are high, which might not cover all cases. The third is always checking bits, so it's more comprehensive. But according to the user's doc, the timer is active or not, but the width of mtime_d should be 64 bits always. Therefore, the third assertion is correct and the first is redundant. So retain the third.
+
+Therefore, for width assertions, the third assertion is sufficient.
+
+Now, list all assertions mentioning mtime_d:
+
+1. Assertion 1: checks bits when rst_ni and active. (Maybe valid but redundant)
+2. Assertion 2: checks reset drives mtime_d to 0. Valid.
+3. Assertion 3: checks bits always. Valid.
+4. mtime_d_tick_connectivity: when tick, mtime_d is mtime + step (assuming step is 64-bit)
+5. mtime_d_notick_connectivity: no tick, mtime_d equals mtime. Valid.
+6. mtime_update_connectivity: mtime is past mtime_d. Valid.
+7. step_zero_extension (version1): incorrect upper bits.
+8. mtime_d_reset_inactive: when reset inactive, mtime_d is stable. Not sure. The property says (!rst_ni || !active) |-> $stable(mtime_d). Wait, (!rst_ni) is reset active, which assertion 2 covers. But if !active, mtime_d should stay the same. So this is a valid assertion.
+9. mtime_tick_connection: same as mtime_d_tick_connectivity.
+10. mtime_stable_connection: same as mtime_d_notick_connectivity.
+11. mtime_reg_propagation: same as mtime_update_connectivity.
+12. step_carry_handling: when tick, mtime_d upper bits are mtime's plus carry from lower. This is valid if step is 8-bit. For example, if step is added to the lower 8 bits, and any carry affects the upper bits. But if step is 8-bit, then step is added to the entire 64-bit (zero-extended), so step_carry_handling is redundant if we have the step_zero_extension or safe_addition. Wait, the step_carry_handling property checks that mtime_d[63:8] equals mtime[63:8] + ((mtime[7:0] + step) >>8). Which is exactly the carry. For example, if mtime[7:0] is 0xFF and step is 0x01, then (0xFF +0x01) =0x100, so the carry is 1. Then, mtime_d[63:8] = mtime[63:8] +1. So this property checks the carry is handled correctly. However, if step is zero-extended, adding mtime + step would automatically handle the carry. So I think step_carry_handling is redundant if step is zero-extended. But according to the user's list, this property is present and should be considered. But according to the documentation, step is 8-bit, so this assertion is valid. However, if the step is added as a full 64-bit value (but zero-extended), then this property and the step_zero_extension would both be ensuring the same thing. But step_carry_handling is a more specific check on the upper bits. Therefore, this is another valid assertion.
+
+But perhaps it's redundant with the safe_addition or step_zero_extension. However, since the user wants to maximize retained assertions, we should include it.
+
+Continuing:
+
+13. active_freeze: when active becomes active after being inactive, mtime_d is past mtime. Not sure. The property says (active && $past(!active)) |-> mtime_d == $past(mtime). This checks that when active transitions from inactive to active, mtime_d is set to the previous mtime. According to the documentation, active might control if the timer is running. So when active is low, the timer is frozen. Therefore, when active becomes high again, mtime_d should start from where it was. So this assertion is valid.
+
+Another active_freeze property: !active |=> mtime_d == $past(mtime_d). This checks that when active is low, mtime_d remains stable. Also valid.
+
+14. step_zero_extension (second version): correct zero-extension.
+15. no_tick_stability: same as mtime_d_notick_connectivity.
+16. reg_update: mtime is past mtime_d. Same as mtime_update_connectivity.
+17. reset_initialization: checks after reset is deasserted, mtime_d is 0. But earlier assertion 2 covers !rst_ni |-> mtime_d is 0. This may not be necessary but could be a different scenario.
+18. safe_addition: same as step_zero_extension (second version).
+19. mtime_d_connectivity_tick: same as mtime_tick_connection.
+20. mtime_d_connectivity_no_tick: same as mtime_d_notick_connectivity.
+21. mtime_update: same as mtime_reg_propagation.
+22. mtime_d_stability: when no tick, mtime_d stays same as past. Redundant with other assertions.
+23. mtime_d_increment: on tick, mtime_d is past mtime_d + step. But this seems similar to other assertions.
+24. reset_initialization: as before.
+25. active_freeze (second version): when active is low, mtime_d remains same as past.
+
+After going through all, I need to list all unique assertions. 
+
+But considering the user instructions: Do not modify the assertions, just return all unique ones. So even if two assertions are the same in code, but written differently, include them. But if they are exactly the same code, then they are duplicates.
+
+But looking at the user's list:
+
+For example, mtime_d_tick_connectivity and mtime_tick_connection have the same code? Let me check:
+
+Original entries:
+
+4. 'property mtime_d_tick_connectivity;\n  @(posedge clk_i)\n  (rst_ni && active) |-> (tick |-> (mtime_d == (mtime + step)));\nendproperty\nassert property (mtime_d_tick_connectivity);'
+
+9. 'property mtime_tick_connection;\n  @(posedge clk_i)\n  (rst_ni && active) |-> (tick |-> (mtime_d == (mtime + step)));\nendproperty\nassert property (mtime_tick_connection);'
+
+Wait, no. The 4th entry's property is named mtime_d_tick_connectivity, the 9th is mtime_tick_connection. The code inside the properties is the same. So the code inside the properties is the same but with different names. So these are two separate assertions with the same logic but different names. Therefore, they are considered duplicates in terms of functionality but different in name. The user's instruction is to extract all unique assertions. If unique is based on the code, not the name, then these are duplicates and should be merged. However, since the user wants to maximize the number of retained assertions, even if they are duplicates, they should be included. But since the code is the same, they are not unique. However, the user's list may have typos. 
+
+But looking at the actual code:
+
+No, checking the two properties:
+
+The fourth property (mtime_d_tick_connectivity) has:
+
+(active) |-> (tick |-> (mtime_d == ...))
+
+The ninth (mtime_tick_connection) has the same code.
+
+Yes, so they are duplicates. Therefore, only include one.
+
+Similarly, several other assertions are duplicates.
+
+Thus, the process is to go through each assertion, check if the code is unique, and retain those that are different.
+
+Now, compiling the unique assertions:
+
+Width-related:
+
+- 'assert property (@(posedge clk_i) $bits(mtime_d) == 64);' (assertion 3)
+- The first assertion (active and rst_ni leading to 64 bits) is redundant but technically different. Since the third assertion is unconditional, but the first is conditional, they are different. However, according to the documentation, mtime_d is a 64-bit counter, so the width should always be 64 bits. Therefore, assertion 3 is sufficient, and assertion 1 is redundant. But the user said to ensure width assertion is present. So include both if they are valid. But assertion 1 is only when rst_ni and active are true, which may miss other cases. But according to the documentation, the timer is active when active is high. If active is low, maybe mtime_d is not updated but still must be 64 bits. Therefore, assertion 3 is better. But user says "maximise retained assertions", so include both. But since the user's list includes assertion 1 and 3, but they are different, include both.
+
+Reset related:
+
+- "assert property (@(posedge clk_i) !rst_ni |-> mtime_d == 64'h0);" (assertion 2)
+- "property reset_initialization;\n  @(posedge clk_i)\n  $fell(rst_ni) |-> ##1 (rst_ni implies (mtime_d == 64'h0));\nendproperty\nassert property (reset_initialization);" (assertion 24)
+
+Assertion 2 checks that whenever reset is low, mtime_d is 0. Assertion 24 checks that when reset falls (is asserted), then in the next cycle, if reset is high, mtime_d is 0. This seems less useful, but the user might have provided it. However, the correct reset behavior is captured in assertion 2. So include assertion 2. Assertion 24 may not be necessary as it's a specific scenario. But according to the user's instructions, we need to include all unique and valid, so if it's valid, keep it. 
+
+But when reset is asserted ($fell(rst_ni)), then in the next cycle, when rst_ni is high, mtime_d should be 0. But assertion 2 already covers that whenever reset is low, mtime_d is 0. Therefore, assertion 24 is redundant. So include assertion 2 but not assertion 24? Or include both as they are different.
+
+But to maximize retained assertions, include all that are valid. Assertion 24 may be a different scenario but in practice, if reset is low, mtime_d is 0. If reset is deasserted, the next cycle may see mtime_d start incrementing. But according to assertion 2, in reset (rst_ni is 0), mtime_d is 0. Therefore, assertion 24 may not add any new check. Therefore, include assertion 2.
+
+But since the user's list includes both, perhaps include both. But need to check validity. Assertion 2 is correct. Assertion reset_initialization may be incorrect. For example, when $fell(rst_ni) (reset is activated), then in the next cycle, if rst_ni is high (reset deasserted), mtime_d must be 0. But during reset (rst_ni low), mtime_d is 0. So when reset is released (rst_ni rises to 1), mtime_d starts from 0. Therefore, assertion 24 may be redundant. So include only assertion 2.
+
+Another reset-related assertion is "property reset_init;\n  @(posedge clk_i)\n  $rose(rst_ni) |=> (mtime_d == 64'h0);\nendproperty\nassert property (reset_init);". This checks that when reset is deasserted, in the next cycle, mtime_d is 0. But during reset, mtime_d is 0, and when reset is released, active may be high, and the next cycle, mtime_d would start incrementing. So this assertion may not hold if after reset deassertion, the timer becomes active. However, according to the documentation, the timer is initialized to 0 on reset. So after reset, mtime_d should be 0. But assertion 2 ensures that during reset, it's 0. When reset is released, the first cycle after reset would have mtime_d being 0 if active is low. But if active is high, then mtime_d may start incrementing. So the reset_init assertion: $rose(rst_ni) implies mtime_d is 0 next cycle. This may not be valid. For example, after reset is released (rst_ni high), and active is high, then in the next cycle, mtime_d could be step if there was a tick. Therefore, this assertion may not be valid and should be excluded. Hence, only assertion 2 is valid.
+
+Only include assertion 2 for reset.
+
+On active freeze:
+
+There are two active_freeze properties:
+
+1. 'property active_freeze;\n  @(posedge clk_i)\n  (active && $past(!active)) |-> (mtime_d == $past(mtime));\nendproperty\nassert property (active_freeze);'
+
+2. 'property active_freeze;\n  @(posedge clk_i)\n  !active |=> (mtime_d == $past(mtime_d));\nendproperty\nassert property (active_freeze);'
+
+These check different things. The first checks that when active transitions from inactive to active, mtime_d is the past mtime. The second checks that when active is low, mtime_d remains the same as previous value. Both are valid and check different scenarios. So include both.
+
+Other assertions:
+
+- mtime_d_reset_inactive: checks that when reset is inactive (rst_ni high and active low), mtime_d is stable. This is covered by the second active_freeze property. Or not. The mtime_d_reset_inactive property says (!rst_ni || !active) |-> $stable(mtime_d). So whenever reset is inactive (wait, no: !rst_ni is reset active, so if !rst_ni is true, then the property is triggered. Wait, no: !rst_ni is low (reset active). The property is:
+
+(!rst_ni || !active) |-> $stable(mtime_d)
+
+So when either reset is active or active is low, mtime_d is stable. This is different from assertion 2, which handles reset. For the active part: when active is low, mtime_d should be stable. This is captured by this assertion. The second active_freeze assertion checks that when !active, mtime_d == past mtime_d. Which is the same as $stable(mtime_d). So both properties are asserting the same thing. So active_freeze property 2 and mtime_d_reset_inactive are the same. So to avoid duplicates, keep one.
+
+But considering the code:
+
+mtime_d_reset_inactive: (!rst_ni || !active) |-> $stable(mtime_d)
+
+active_freeze 2: !active |=> (mtime_d == $past(mtime_d))
+
+The first includes both reset and active conditions. The second is only when active is low. So they are different. When reset is active, mtime_d is 0 (assertion 2). So in the mtime_d_reset_inactive assertion, when !rst_ni is true (reset active), mtime_d is 0, which is stable. When !active is true, mtime_d is stable. So the mtime_d_reset_inactive assertion is combining both cases. However, when reset is active, mtime_d is 0, so any changes would violate $stable, but according to assertion 2, mtime_d is 0 during reset, so it's already stable.
+
+Thus, the mtime_d_reset_inactive assertion is redundant when reset is active but is checking that when either reset is active or active is low, mtime_d is stable. However, during reset, mtime_d is already 0 (assertion 2), so $stable would hold. So the assertion is covering two scenarios: reset and inactive. It's a valid assertion. Therefore, include it.
+
+Step-carry handling:
+
+property step_carry_handling checks that upper bits are updated based on carry from lower 8 bits. This is a specific check and is valid. Include this.
+
+Other properties:
+
+- step_zero_extension (second version) and safe_addition are the same. Include one of them.
+
+- mtime_reg_propagation and mtime_update_connectivity are the same. Include one.
+
+Now, compiling the final list:
+
+Width assertions:
+3. 'assert property (@(posedge clk_i) $bits(mtime_d) == 64);'
+
+Reset assertion:
+2. "assert property (@(posedge clk_i) !rst_ni |-> mtime_d == 64'h0);"
+
+Active and stability:
+
+mtime_d_reset_inactive: property mtime_d_reset_inactive; (code: (!rst_ni || !active) |-> $stable(mtime_d);)
+
+active_freeze (first): (active && $past(!active)) |-> mtime_d == $past(mtime)
+
+active_freeze (second): !active |=> mtime_d == $past(mtime_d)
+
+Tick connectivity:
+
+mtime_tick_connection: (rst_ni && active) |-> (tick |-> (mtime_d == (mtime + step)))
+
+mtime_d_notick_connectivity: (rst_ni && active) |-> (!tick |-> (mtime_d == mtime))
+
+Step-related:
+
+step_zero_extension (second version): mtime_d == mtime + {{56{1'b0}}, step}
+
+step_carry_handling: mtime_d[63:8] == mtime[63:8] + ((mtime[7:0] + step) >> 8)
+
+Others:
+
+mtime_update_connectivity: (rst_ni && active) |-> (mtime == $past(mtime_d, 1))
+
+reg_update: (rst_ni && active) |=> (mtime == $past(mtime_d))
+
+no_tick_stability: (rst_ni && active && !tick) |-> (mtime_d == mtime)
+
+safe_addition: mtime_d == mtime + 64'(unsigned'(step))
+
+step_zero_extension (first version) is incorrect and should be excluded.
+
+After reviewing, the unique valid assertions related to mtime_d are:
+
+1. Width assertion (unconditional): 'assert property (@(posedge clk_i) $bits(mtime_d) == 64);'
+
+2. Reset assertion: "assert property (@(posedge clk_i) !rst_ni |-> mtime_d == 64'h0);"
+
+3. mtime_d_reset_inactive: property checking stability when reset or inactive.
+
+4. active_freeze (transition to active): mtime_d is past mtime.
+
+5. active_freeze (when inactive): mtime_d remains stable.
+
+6. mtime_tick_connection: on tick, mtime_d increases by step.
+
+7. mtime_d_notick_connectivity: no tick, mtime_d equals mtime.
+
+8. step_zero_extension (second version): zero-extended step addition.
+
+9. step_carry_handling: checks carry from lower bits.
+
+10. mtime_update_connectivity: mtime is past mtime_d.
+
+11. reg_update: mtime is past mtime_d next cycle.
+
+12. no_tick_stability: same as mtime_d_notick_connectivity.
+
+But need to ensure uniqueness. For example, no_tick_stability is the same as mtime_d_notick_connectivity. So only include once.
+
+After removing duplicates:
+
+Unique assertions:
+
+1. Width assertion (unconditional): assertion 3.
+
+2. Reset assertion: assertion 2.
+
+3. mtime_d_reset_inactive: property.
+
+4. active_freeze (transition to active).
+
+5. active_freeze (when inactive).
+
+6. mtime_tick_connection (or mtime_d_connectivity_tick).
+
+7. mtime_d_notick_connectivity (or no_tick_stability).
+
+8. step_zero_extension (second version).
+
+9. step_carry_handling.
+
+10. mtime_update_connectivity.
+
+11. reg_update.
+
+12. safe_addition (if different from step_zero_extension).
+
+But need to verify code.
+
+After eliminating exact duplicates (same code, different names):
+
+- mtime_tick_connection and mtime_d_connectivity_tick are the same code.
+
+- mtime_d_notick_connectivity, mtime_stable_connection, and no_tick_stability are the same.
+
+- mtime_update_connectivity and mtime_reg_propagation are the same.
+
+- reg_update and mtime_reg_propagation are different (reg_update uses |=> ).
+
+Thus, each of these should be considered unique if their code differs.
+
+Final list of unique and valid assertions for mtime_d, maximized:
+
+```systemverilog
+// Width assertion
+assert property (@(posedge clk_i) $bits(mtime_d) == 64);
+
+// Reset initialization
+assert property (@(posedge clk_i) !rst_ni |-> mtime_d == 64'h0);
+
+// mtime_d stability when reset inactive or not active
+assert property (@(posedge clk_i) (!rst_ni || !active) |-> $stable(mtime_d));
+
+// Active freeze after activation
+assert property (@(posedge clk_i) (active && $past(!active)) |-> (mtime_d == $past(mtime)));
+
+// Active freeze when inactive
+assert property (@(posedge clk_i) !active |=> (mtime_d == $past(mtime_d)));
+
+// mtime_d increments by step on tick
+assert property (@(posedge clk_i) (rst_ni && active) |-> (tick |-> (mtime_d == (mtime + step))));
+
+// mtime_d remains the same when no tick
+assert property (@(posedge clk_i) (rst_ni && active) |-> (!tick |-> (mtime_d == mtime)));
+
+// mtime_d updated with zero-extended step on tick
+assert property (@(posedge clk_i) (rst_ni && active && tick) |-> mtime_d == (mtime + {{56{1'b0}}, step}));
+
+// Carry handling from lower 8 bits
+assert property (@(posedge clk_i) (rst_ni && active) |-> (tick |-> mtime_d[63:8] == (mtime[63:8] + ((mtime[7:0] + step) >> 8))));
+
+// mtime updates from mtime_d
+assert property (@(posedge clk_i) (rst_ni && active) |-> (mtime == $past(mtime_d, 1)));
+
+// mtime updates in next cycle
+assert property (@(posedge clk_i) (rst_ni && active) |=> (mtime == $past(mtime_d)));
+
+// Safe addition with cast
+assert property (@(posedge clk_i) (rst_ni && active && tick) |-> mtime_d == (mtime + 64'(unsigned'(step))));
+```
+</think>
+
+```systemverilog
+// Width assertion
+assert property (@(posedge clk_i) $bits(mtime_d) == 64);
+
+// Reset initialization
+assert property (@(posedge clk_i) !rst_ni |-> mtime_d == 64'h0);
+
+// mtime_d stability when reset inactive or not active
+assert property (@(posedge clk_i) (!rst_ni || !active) |-> $stable(mtime_d));
+
+// Active freeze after activation
+assert property (@(posedge clk_i) (active && $past(!active)) |-> (mtime_d == $past(mtime)));
+
+// Active freeze when inactive
+assert property (@(posedge clk_i) !active |=> (mtime_d == $past(mtime_d)));
+
+// mtime_d increments by step on tick
+assert property (@(posedge clk_i) (rst_ni && active) |-> (tick |-> (mtime_d == (mtime + step))));
+
+// mtime_d remains the same when no tick
+assert property (@(posedge clk_i) (rst_ni && active) |-> (!tick |-> (mtime_d == mtime)));
+
+// mtime_d updated with zero-extended step on tick
+assert property (@(posedge clk_i) (rst_ni && active && tick) |-> mtime_d == (mtime + {{56{1'b0}}, step}));
+
+// Carry handling from lower 8 bits
+assert property (@(posedge clk_i) (rst_ni && active) |-> (tick |-> mtime_d[63:8] == (mtime[63:8] + ((mtime[7:0] + step) >> 8))));
+
+// mtime updates from mtime_d
+assert property (@(posedge clk_i) (rst_ni && active) |-> (mtime == $past(mtime_d, 1)));
+
+// mtime updates in next cycle
+assert property (@(posedge clk_i) (rst_ni && active) |=> (mtime == $past(mtime_d)));
+
+// Safe addition with cast
+assert property (@(posedge clk_i) (rst_ni && active && tick) |-> mtime_d == (mtime + 64'(unsigned'(step))));
+```

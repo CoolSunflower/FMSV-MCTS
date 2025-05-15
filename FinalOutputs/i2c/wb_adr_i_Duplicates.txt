@@ -1,0 +1,38 @@
+assert property (@(posedge wb_clk_i) $bits(wb_adr_i) == 3);
+
+property valid_address_range;
+  @(posedge wb_clk_i) disable iff (wb_rst_i || arst_i)
+  (wb_stb_i && wb_cyc_i) |-> (wb_adr_i inside {0,1,2,3,4});
+endproperty
+assert property (valid_address_range);
+
+property address_stability;
+  @(posedge wb_clk_i) disable iff (wb_rst_i || arst_i)
+  (wb_stb_i && wb_cyc_i) |-> $stable(wb_adr_i) until wb_ack_o;
+endproperty
+assert property (address_stability);
+
+property valid_address_range;
+  @(posedge wb_clk_i) disable iff (arst_i || wb_rst_i)
+  (wb_stb_i && wb_cyc_i) |-> (wb_adr_i inside {[0:4]});
+endproperty
+assert property (valid_address_range);
+
+property address_stability;
+  @(posedge wb_clk_i) disable iff (arst_i || wb_rst_i)
+  (wb_stb_i && wb_cyc_i) |-> ##[0:1] $stable(wb_adr_i) throughout (wb_cyc_i[->1] ##0 wb_ack_o);
+endproperty
+assert property (address_stability);
+
+property address_stability;
+  @(posedge wb_clk_i) disable iff (wb_rst_i || arst_i)
+  (wb_stb_i && wb_cyc_i && !wb_ack_o) |=> $stable(wb_adr_i);
+endproperty
+assert property (address_stability);
+
+property unused_address_bits;
+    @(posedge wb_clk_i) disable iff (arst_i || wb_rst_i)
+    (wb_stb_i && wb_cyc_i) |-> (wb_adr_i[2:0] <= 3'h5); // Valid addresses 0x00-0x05
+endproperty
+assert property (unused_address_bits);
+

@@ -1,0 +1,106 @@
+assert property (@(posedge wb_clk_i) $bits(wb_rst_i) == 1);
+property scl_oe_reset;
+  @(posedge wb_clk_i) wb_rst_i |-> scl_pad_oe;
+endproperty
+assert property (scl_oe_reset);
+property sda_oe_reset;
+  @(posedge wb_clk_i) wb_rst_i |-> sda_pad_oe;
+endproperty
+assert property (sda_oe_reset);
+property wb_outputs_reset;
+  @(posedge wb_clk_i) wb_rst_i |-> (wb_ack_o == 0 && wb_inta_o == 0);
+endproperty
+assert property (wb_outputs_reset);
+property prer_stable_reset;
+  @(posedge wb_clk_i) $rose(wb_rst_i) |=> always (prer == 16'hFFFF) until (!wb_rst_i);
+endproperty
+assert property (prer_stable_reset);
+property ctr_reset;
+  @(posedge wb_clk_i) wb_rst_i |-> (ctr == 8'h00);
+endproperty
+assert property (ctr_reset);
+property arbitration_lost_reset;
+  @(posedge wb_clk_i) wb_rst_i |-> !sr[2]; // AL=bit2
+endproperty
+assert property (arbitration_lost_reset);
+property wb_data_reset;
+  @(posedge wb_clk_i) 
+  wb_rst_i && !(wb_cyc_i && wb_stb_i) |-> wb_dat_o == 8'h00;
+endproperty
+assert property (wb_data_reset);
+property scl_data_reset;
+  @(posedge wb_clk_i) wb_rst_i |-> scl_pad_o == 1'b0;
+endproperty
+assert property (scl_data_reset);
+property sda_data_reset;
+  @(posedge wb_clk_i) wb_rst_i |-> sda_pad_o == 1'b0;
+endproperty
+assert property (sda_data_reset);
+property prer_stable_reset;
+  @(posedge wb_clk_i) $rose(wb_rst_i) |=> (prer == 16'hFFFF) throughout wb_rst_i;
+endproperty
+assert property (prer_stable_reset);
+property CTR_Reset;
+  @(posedge wb_clk_i) wb_rst_i |-> (ctr == 8'h00);
+endproperty
+assert property (CTR_Reset);
+property PRER_Reset;
+  @(posedge wb_clk_i) wb_rst_i |-> (prer == 16'hFFFF);
+endproperty
+assert property (PRER_Reset);
+property SR_Reset;
+  @(posedge wb_clk_i) wb_rst_i |-> (sr == 8'h00);
+endproperty
+assert property (SR_Reset);
+property CR_Reset;
+  @(posedge wb_clk_i) wb_rst_i |-> (cr == 8'h00);
+endproperty
+assert property (CR_Reset);
+property TXR_Reset;
+  @(posedge wb_clk_i) wb_rst_i |-> (txr == 8'h00);
+endproperty
+assert property (TXR_Reset);
+property RXR_Reset;
+  @(posedge wb_clk_i) wb_rst_i |-> (rxr == 8'h00);
+endproperty
+assert property (RXR_Reset);
+property SCL_OE_Reset;
+  @(posedge wb_clk_i) wb_rst_i |-> (scl_pad_oe == 1'b1);
+endproperty
+assert property (SCL_OE_Reset);
+property SDA_OE_Reset;
+  @(posedge wb_clk_i) wb_rst_i |-> (sda_pad_oe == 1'b1);
+endproperty
+assert property (SDA_OE_Reset);
+property WB_Data_Reset;
+  @(posedge wb_clk_i) wb_rst_i |-> (wb_dat_o == 8'h00);
+endproperty
+assert property (WB_Data_Reset);
+property WB_Ack_Reset;
+  @(posedge wb_clk_i) wb_rst_i |-> (wb_ack_o == 1'b0);
+endproperty
+assert property (WB_Ack_Reset);
+property WB_Int_Reset;
+  @(posedge wb_clk_i) wb_rst_i |-> (wb_inta_o == 1'b0);
+endproperty
+assert property (WB_Int_Reset);
+property p_rw_exclusivity;
+    @(posedge wb_clk_i) 
+    $countones({$isunknown(wb_dat_o[7]), $isunknown(wb_dat_o[6]), $isunknown(wb_dat_o[5])}) == 2;
+endproperty
+assert property (p_rw_exclusivity);
+property p_reset_control_reg;
+    @(posedge wb_clk_i)
+    wb_rst_i |-> (ctr == 8'h00); // Control register should reset to 0x00
+endproperty
+assert property (p_reset_control_reg);
+property p_reset_prescale_reg;
+    @(posedge wb_clk_i)
+    wb_rst_i |=> (prer == 16'hFFFF); // Prescale register should reset to 0xFFFF after reset
+endproperty
+assert property (p_reset_prescale_reg);
+property p_reset_busy_flag;
+    @(posedge wb_clk_i)
+    wb_rst_i |=> !sr[5]; // BUSY bit (bit 5 in status register) should clear after reset
+endproperty
+assert property (p_reset_busy_flag);

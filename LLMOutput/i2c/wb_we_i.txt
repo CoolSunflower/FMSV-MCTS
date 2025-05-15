@@ -1,0 +1,61 @@
+<think>
+Okay, let's tackle generating the SVAs for wb_we_i. First, I need to understand the signal's role. It's a 1-bit Write Enable in the WISHBONE interface. When high, it enables writing to the core's registers; when low, it's a read. The key is to ensure correct behavior during valid bus cycles, stability, and proper acknowledgment.
+
+Starting with the width check. Since it's a 1-bit signal, an assertion to verify its width is straightforward. Use $bits to check it's exactly 1 bit. Also, include disable conditions for resets to avoid false positives during reset periods.
+
+Next, connectivity. The WISHBONE spec says each access takes 2 cycles. So, during active cycles (wb_cyc_i and wb_stb_i high), wb_we_i must remain stable until wb_ack_o is received. The previous attempt used 'until_within', which isn't valid. Replacing it with 'throughout' ensures stability throughout the entire transaction. Also, since the access is 2 cycles, the acknowledgment (wb_ack_o) should come exactly one cycle after the cycle starts. So, using |=> ##1 to check that.
+
+Functionality-wise, both writes and reads need acknowledgment. So, separate properties for write and read cycles. For writes, check that wb_ack_o asserts in the next cycle when wb_we_i is high. Similarly, for reads when wb_we_i is low. 
+
+Reset handling is crucial. The core can use either synchronous (wb_rst_i) or asynchronous (arst_i) reset. So, disable iff should include both. Also, ensure no acknowledgments occur during reset, regardless of other signals.
+
+Stability during active cycles is a must. Using 'throughout' with the sequence (wb_cyc_i && wb_stb_i)[->1] ensures that once the cycle starts, wb_we_i remains stable until the acknowledgment. This aligns with WISHBONE's requirement for signal stability during transactions.
+
+Finally, check that during reset, no acknowledgment is generated. This covers both types of resets and prevents any bus activity during reset periods.
+
+Putting it all together, the SVAs cover width, stability, correct acknowledgment timing for both reads and writes, and proper reset behavior. Each assertion is designed to be tool-agnostic and compliant with the WISHBONE spec, ensuring completeness and correctness.
+</think>
+
+```systemverilog
+// Width assertion: Verify 1-bit signal integrity
+assert property (@(posedge wb_clk_i) disable iff (wb_rst_i || arst_i) 
+    $bits(wb_we_i) == 1);
+
+// Connectivity: Signal stability during valid transactions
+property wb_we_stability_p;
+    @(posedge wb_clk_i) disable iff (wb_rst_i || arst_i)
+    (wb_cyc_i && wb_stb_i) |-> 
+    $stable(wb_we_i) throughout (wb_cyc_i && wb_stb_i)[->1] ##0 wb_ack_o;
+endproperty
+assert property (wb_we_stability_p);
+
+// Functionality: Write acknowledgment timing (2-cycle rule)
+property wb_write_ack_p;
+    @(posedge wb_clk_i) disable iff (wb_rst_i || arst_i)
+    (wb_cyc_i && wb_stb_i && wb_we_i) |=> ##1 wb_ack_o;
+endproperty
+assert property (wb_write_ack_p);
+
+// Functionality: Read acknowledgment timing (2-cycle rule)
+property wb_read_ack_p;
+    @(posedge wb_clk_i) disable iff (wb_rst_i || arst_i)
+    (wb_cyc_i && wb_stb_i && !wb_we_i) |=> ##1 wb_ack_o;
+endproperty
+assert property (wb_read_ack_p);
+
+// Functionality: Reset behavior for both reset types
+property wb_reset_behavior_p;
+    @(posedge wb_clk_i)
+    (wb_rst_i || arst_i) |-> !wb_ack_o;
+endproperty
+assert property (wb_reset_behavior_p);
+```
+
+**Verification Coverage:**
+1. **Width Check**: Ensures physical implementation compliance
+2. **Signal Stability**: Maintains WISHBONE protocol integrity during transactions
+3. **Ack Timing**: Validates 2-cycle operation for both read/write
+4. **Reset Safety**: Prevents bus activity during any reset condition
+5. **Multi-Reset Support**: Covers both synchronous (wb_rst_i) and asynchronous (arst_i) reset scenarios
+
+These assertions strictly follow the WISHBONE specification and address all identified failure modes from previous implementations while maintaining tool neutrality.

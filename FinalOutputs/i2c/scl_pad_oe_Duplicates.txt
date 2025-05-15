@@ -1,0 +1,102 @@
+assert property (@(posedge wb_clk_i) $bits(scl_pad_oe) == 1);
+
+assert property (@(posedge wb_clk_i) sr[3] |-> SCL_OE_Toggle.triggered);
+
+property SCL_OE_Connectivity;
+  @(posedge wb_clk_i) (scl_pad_oe == 1'b0) |-> (scl_pad_o == 1'b0);
+endproperty
+assert property (SCL_OE_Connectivity);
+
+property SCL_OE_ClockStretch;
+  @(posedge wb_clk_i) 
+  (sr[3] && !scl_pad_i) |-> ##[1:5] scl_pad_oe == 1'b1; // TIP=1 during stretching
+endproperty
+assert property (SCL_OE_ClockStretch);
+
+property SCL_OE_DisabledStates;
+  @(posedge wb_clk_i)
+  (ctr[7] == 1'b0 || sr[5] == 1'b1) |-> scl_pad_oe == 1'b1;
+endproperty
+assert property (SCL_OE_DisabledStates);
+
+property SCL_OE_Toggle;
+  @(posedge wb_clk_i)
+  (sr[3] && !sr[5]) |-> SCL_DrivePhase.triggered; // TIP=1, AL=0
+endproperty
+assert property (SCL_OE_Toggle);
+
+property SCL_OE_Disabled;
+  @(posedge wb_clk_i) (ctr[7] == 1'b0) |-> (scl_pad_oe == 1'b1);
+endproperty
+assert property (SCL_OE_Disabled);
+
+property SCL_OE_ArbitrationLost;
+  @(posedge wb_clk_i) (sr[5] == 1'b1) |-> (scl_pad_oe == 1'b1);
+endproperty
+assert property (SCL_OE_ArbitrationLost);
+
+property SCL_OE_ClockStretching;
+  @(posedge wb_clk_i) (sr[1] && !scl_pad_i) |-> (scl_pad_oe == 1'b1);
+endproperty
+assert property (SCL_OE_ClockStretching);
+
+property SCL_OE_StartStop;
+  @(posedge wb_clk_i) (cr[2] || cr[1]) |-> (scl_pad_oe == 1'b1);
+endproperty
+assert property (SCL_OE_StartStop);
+
+property SCL_OE_MultiMaster;
+  @(posedge wb_clk_i) (scl_pad_oe == 1'b1 && scl_pad_i == 1'b0) |-> ##1 (scl_pad_oe == 1'b1);
+endproperty
+assert property (SCL_OE_MultiMaster);
+
+property SCL_OE_Reset;
+  @(posedge wb_clk_i) $rose(arst_i) || $rose(wb_rst_i) |=> (scl_pad_oe == 1'b1);
+endproperty
+assert property (SCL_OE_Reset);
+
+property SCL_OE_ArbitrationPriority;
+  @(posedge wb_clk_i) (ctr[7] && sr[5]) |-> (scl_pad_oe == 1'b1);
+endproperty
+assert property (SCL_OE_ArbitrationPriority);
+
+property SCL_OE_Disabled;
+  @(posedge wb_clk_i) (ctr[7] == 1'b0 && sr[3] == 1'b0) |-> (scl_pad_oe == 1'b1);
+endproperty
+assert property (SCL_OE_Disabled);
+
+property SCL_OE_ArbitrationLost;
+  @(posedge wb_clk_i) $rose(sr[5]) |-> (scl_pad_oe == 1'b1);
+endproperty
+assert property (SCL_OE_ArbitrationLost);
+
+property SCL_OE_ClockStretch;
+  @(posedge wb_clk_i) (scl_pad_i == 1'b0 && sr[3] == 1'b1) |-> (scl_pad_oe == 1'b1);
+endproperty
+assert property (SCL_OE_ClockStretch);
+
+property SCL_OE_AsyncReset;
+  @(posedge wb_clk_i) $rose(arst_i) |-> ##1 (scl_pad_oe == 1'b1);
+endproperty
+assert property (SCL_OE_AsyncReset);
+
+property SCL_OE_ClockStretching;
+  @(posedge wb_clk_i) (sr[3] && !scl_pad_i) |-> (scl_pad_oe == 1'b1);
+endproperty
+assert property (SCL_OE_ClockStretching);
+
+property SCL_OE_StartStop;
+  @(posedge wb_clk_i) (cr[7] || cr[6]) |-> (scl_pad_oe == 1'b1);
+endproperty
+assert property (SCL_OE_StartStop);
+
+property SCL_OE_Busy;
+  @(posedge wb_clk_i) (sr[4] && !sr[5] && ctr[7]) |-> !$isunknown(scl_pad_oe);
+endproperty
+assert property (SCL_OE_Busy);
+
+property SCL_OE_AsyncReset;
+  @(posedge wb_clk_i) $rose(arst_i) |=> (scl_pad_oe == 1'b1);
+endproperty
+assert property (SCL_OE_AsyncReset);
+

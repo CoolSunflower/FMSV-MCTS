@@ -1,0 +1,100 @@
+assert property (@(posedge wb_clk_i) $bits(wb_we_i) == 1);
+
+assert property (@(posedge wb_clk_i) disable iff (wb_rst_i) $bits(wb_we_i) == 1);
+
+property wb_we_stable_p;
+  @(posedge wb_clk_i) disable iff (wb_rst_i)
+  (wb_cyc_i && wb_stb_i) |-> $stable(wb_we_i) throughout (##1 wb_ack_o);
+endproperty
+assert property (wb_we_stable_p);
+
+property wb_write_ack_p;
+  @(posedge wb_clk_i) disable iff (wb_rst_i)
+  (wb_cyc_i && wb_stb_i && wb_we_i) |=> ##1 wb_ack_o;
+endproperty
+assert property (wb_write_ack_p);
+
+property wb_reset_block_p;
+  @(posedge wb_clk_i)
+  wb_rst_i |-> !(wb_cyc_i && wb_stb_i && wb_we_i && wb_ack_o);
+endproperty
+assert property (wb_reset_block_p);
+
+property wb_we_stability_p;
+  @(posedge wb_clk_i) disable iff (wb_rst_i || arst_i)
+  (wb_cyc_i && wb_stb_i) |-> $stable(wb_we_i) throughout (wb_cyc_i && wb_stb_i) until wb_ack_o;
+endproperty
+assert property (wb_we_stability_p);
+
+property wb_ack_timing_p;
+  @(posedge wb_clk_i) disable iff (wb_rst_i || arst_i)
+  (wb_cyc_i && wb_stb_i) |-> ##1 wb_ack_o ##1 !wb_ack_o;
+endproperty
+assert property (wb_ack_timing_p);
+
+property wb_reset_behavior_p;
+  @(posedge wb_clk_i)
+  (wb_rst_i || arst_i) |-> !wb_ack_o;
+endproperty
+assert property (wb_reset_behavior_p);
+
+property wb_we_stable_p;
+  @(posedge wb_clk_i) disable iff (wb_rst_i)
+  (wb_cyc_i && wb_stb_i) |-> $stable(wb_we_i) throughout (wb_cyc_i && wb_stb_i)[->1];
+endproperty
+assert property (wb_we_stable_p);
+
+property wb_write_ack_p;
+  @(posedge wb_clk_i) disable iff (wb_rst_i)
+  (wb_cyc_i && wb_stb_i && wb_we_i) |-> ##2 wb_ack_o;
+endproperty
+assert property (wb_write_ack_p);
+
+property wb_read_ack_p;
+  @(posedge wb_clk_i) disable iff (wb_rst_i)
+  (wb_cyc_i && wb_stb_i && !wb_we_i) |-> ##2 wb_ack_o;
+endproperty
+assert property (wb_read_ack_p);
+
+property wb_reset_effect_p;
+  @(posedge wb_clk_i)
+  wb_rst_i |-> !(wb_ack_o);
+endproperty
+assert property (wb_reset_effect_p);
+
+property wb_we_stable_p;
+  @(posedge wb_clk_i) disable iff (wb_rst_i || arst_i)
+  (wb_cyc_i && wb_stb_i) |-> $stable(wb_we_i) throughout (wb_cyc_i && wb_stb_i)[->1] ##0 wb_ack_o;
+endproperty
+assert property (wb_we_stable_p);
+
+property wb_write_ack_p;
+  @(posedge wb_clk_i) disable iff (wb_rst_i || arst_i)
+  (wb_cyc_i && wb_stb_i && wb_we_i) |=> ##1 wb_ack_o;
+endproperty
+assert property (wb_write_ack_p);
+
+property wb_read_ack_p;
+  @(posedge wb_clk_i) disable iff (wb_rst_i || arst_i)
+  (wb_cyc_i && wb_stb_i && !wb_we_i) |=> ##1 wb_ack_o;
+endproperty
+assert property (wb_read_ack_p);
+
+property wb_reset_ack_p;
+  @(posedge wb_clk_i)
+  (wb_rst_i || arst_i) |-> !(wb_cyc_i && wb_stb_i && wb_ack_o);
+endproperty
+assert property (wb_reset_ack_p);
+
+property wb_reset_write_ack_p;
+  @(posedge wb_clk_i)
+  wb_rst_i |-> !(wb_cyc_i && wb_stb_i && wb_we_i && wb_ack_o);
+endproperty
+assert property (wb_reset_write_ack_p);
+
+property wb_we_stable_p;
+  @(posedge wb_clk_i) disable iff (wb_rst_i)
+  (wb_cyc_i && wb_stb_i) |-> $stable(wb_we_i) throughout (##[0:$] wb_ack_o);
+endproperty
+assert property (wb_we_stable_p);
+

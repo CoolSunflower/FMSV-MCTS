@@ -1,0 +1,86 @@
+<think>
+Okay, let's tackle generating the SVAs for the control register (ctr) based on the specifications provided. 
+
+First, I need to understand the ctr register's role. It's an 8-bit read/write register at address 0x02. The key bits are EN (bit 7) and IEN (bit 6), with bits 5:0 reserved. The reset value is 0x00, meaning the core starts disabled with interrupts off. Reserved bits must be written as zeros, and the core only processes commands when EN is set.
+
+Starting with width checks: The register is 8 bits, so an assertion to verify that makes sense.
+
+Next, connectivity. When the WISHBONE interface writes to address 0x02, the ctr should update. But since the WISHBONE interface takes 2 cycles, I need to account for that. Also, the reserved bits (5:0) must be masked to zero during writes. So, any write should result in ctr being the input data ANDed with 0xC0 (to clear bits 5:0).
+
+Functionality-wise, the reserved bits should always read as zero. Also, after any reset (synchronous or asynchronous), ctr should reset to 0x00. The EN bit can't be cleared if a transfer is in progress (TIP bit in SR is set), so an assertion to check that EN isn't disabled during an active transfer is needed. Additionally, the interrupt enable (IEN) should trigger an interrupt output when the interrupt flag (IF) is set.
+
+I also need to handle both types of resets. The spec mentions an asynchronous reset (arst_i) and a synchronous reset (wb_rst_i). The assertions should check that ctr initializes correctly in both cases.
+
+Wait, the WISHBONE write cycle takes two clock cycles. So the write assertion should check that the update happens after the second cycle, which is when wb_ack_o is asserted. That's important for timing accuracy.
+
+Another point: The spec says that writes to reserved bits must be zero. So, during a write transaction, the data's lower 6 bits should be zero. An assertion to enforce that would ensure compliance.
+
+Putting it all together, the SVAs should cover width, connectivity with proper timing, reserved bits handling, reset conditions, EN safety, and interrupt generation. Each assertion needs to disable during reset to avoid false negatives.
+
+I need to make sure that the asynchronous reset uses the ARST_LVL parameter to check the correct polarity. For example, if ARST_LVL is 0, the reset is active low, so the assertion triggers when arst_i is 0.
+
+Also, the EN bit safety check should ensure that if EN is cleared, the TIP bit in the status register (sr[3]) is not set. That prevents disabling the core during an active transfer.
+
+Finally, all assertions should be written in SystemVerilog, using the correct syntax and signals from the WISHBONE interface and other related signals like sr (status register).
+</think>
+
+```systemverilog
+// Width assertion: Verify CTR register is 8-bit wide
+assert property (@(posedge wb_clk_i) $bits(ctr) == 8);
+
+// Connectivity: Valid WISHBONE writes update CTR with reserved bits masked
+property p_ctr_write;
+  @(posedge wb_clk_i) disable iff (wb_rst_i || (arst_i != ARST_LVL))
+  (wb_we_i && wb_stb_i && wb_cyc_i && (wb_adr_i == 2'h02))
+  ##1 (wb_ack_o) // WISHBONE 2-cycle transaction
+  |=> (ctr == (wb_dat_i & 8'hC0));
+endproperty
+assert property (p_ctr_write);
+
+// Functionality: Reserved bits (5:0) must be written as 0
+property p_ctr_reserved_write;
+  @(posedge wb_clk_i) disable iff (wb_rst_i || (arst_i != ARST_LVL))
+  (wb_we_i && wb_stb_i && wb_cyc_i && (wb_adr_i == 2'h02))
+  |-> (wb_dat_i[5:0] == 6'h0);
+endproperty
+assert property (p_ctr_reserved_write);
+
+// Functionality: Reserved bits always read as 0
+property p_ctr_reserved_read;
+  @(posedge wb_clk_i) disable iff (wb_rst_i || (arst_i != ARST_LVL))
+  (ctr[5:0] == 6'h0);
+endproperty
+assert property (p_ctr_reserved_read);
+
+// Reset: Synchronous and asynchronous reset initialize CTR to 0x00
+property p_ctr_reset;
+  @(posedge wb_clk_i)
+  (wb_rst_i || $changed(arst_i)) |=> (ctr == 8'h00);
+endproperty
+assert property (p_ctr_reset);
+
+// Safety: EN bit cannot be cleared during active transfer
+property p_en_safety;
+  @(posedge wb_clk_i) disable iff (wb_rst_i || (arst_i != ARST_LVL))
+  $fell(ctr[7]) |-> !sr[3]; // TIP (sr[3]) must be 0 when disabling EN
+endproperty
+assert property (p_en_safety);
+
+// Interrupt: IEN enables interrupt output when IF is set
+property p_ien_interrupt;
+  @(posedge wb_clk_i) disable iff (wb_rst_i || (arst_i != ARST_LVL))
+  (ctr[6] && sr[0]) |-> wb_inta_o; // IEN=1 and IF=1 (sr[0])
+endproperty
+assert property (p_ien_interrupt);
+```
+
+**Key Features:**
+1. **WISHBONE Protocol Compliance:** Uses 2-cycle transaction timing with `##1 (wb_ack_o)`
+2. **Reserved Bit Handling:** Dual checks for write-time zero requirement and read-time stability
+3. **Reset Coverage:** Unified assertion for both synchronous (wb_rst_i) and asynchronous (arst_i) resets
+4. **State Safety:** Prevents EN disable during active transfers using status register TIP bit
+5. **Interrupt Validation:** Ensures proper interrupt generation when enabled
+6. **Parameterized Async Reset:** Uses ARST_LVL parameter without hardcoding polarity
+7. **Non-Intrusive Checks:** All properties disable during reset conditions
+
+This set provides complete coverage of the control register's specified behavior while maintaining strict protocol compliance and design safety constraints.

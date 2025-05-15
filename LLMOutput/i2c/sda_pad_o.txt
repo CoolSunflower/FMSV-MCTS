@@ -1,0 +1,61 @@
+<think>
+Okay, let's tackle generating the SVAs for sda_pad_o. First, I need to understand the role of this signal. From the spec, sda_pad_o is the output for the SDA line in an I2C interface, which is open-drain. That means it can only pull the line low when enabled by sda_pad_oe. When not enabled, it's high-Z, and the line is pulled up externally.
+
+Starting with the basics: the width check. The spec says it's a 1-bit signal, so an assertion to confirm that makes sense. Using $bits in SystemVerilog should handle that.
+
+Next, connectivity. The key here is the relationship between sda_pad_o and sda_pad_oe. Since it's open-drain, when sda_pad_oe is active (low), sda_pad_o must be 0. If the core tries to drive high, that's a violation. So an assertion that whenever sda_pad_oe is 0, sda_pad_o is 0 is essential.
+
+Now, functionality. The I2C protocol requires that during SCL high, SDA remains stable. Since the core can only drive low, when sda_pad_oe is 0 (driving), sda_pad_o should stay 0 throughout SCL high. That means checking stability during SCL high when enabled. Also, the core should never drive SDA high when SCL is high, as that could cause unintended START/STOP conditions. Even though the open-drain design should prevent this, an explicit assertion adds safety.
+
+Considering the waveforms and protocol descriptions, during START conditions, the core drives SDA low while SCL is high. The connectivity assertion covers this, but adding a check during SCL high ensures no transitions happen when they shouldn't. Also, after a data bit is set during SCL low, it must remain stable during SCL high, which the stability assertion handles.
+
+I should also think about arbitration and multi-master scenarios. If the core loses arbitration, it should stop driving, but that's more related to sda_pad_oe than sda_pad_o. Since the focus is on sda_pad_o, the main points are covered by the connectivity and stability checks.
+
+Putting it all together, the SVAs should check the width, enforce driving low when enabled, ensure stability during SCL high, and prevent driving high when SCL is high. These cover the essential aspects of the signal's behavior according to the I2C protocol and the core's design.
+</think>
+
+[REASONING]  
+1. **Width Check**: Verify sda_pad_o is strictly 1-bit as defined.  
+2. **Open-Drain Compliance**: Ensure sda_pad_o only drives low when enabled (sda_pad_oe=0).  
+3. **Protocol Stability**: During SCL high phases, sda_pad_o must remain stable (always 0 when driven).  
+4. **Illegal Transitions**: Prevent driving high during SCL high (violates I2C protocol).  
+
+[SVAs]  
+```systemverilog
+// Width assertion for sda_pad_o (1-bit check)
+assert property (@(posedge wb_clk_i) (1'b1) |-> ($bits(sda_pad_o) == 1));
+
+// Open-Drain Drive Rule: sda_pad_o must be 0 when output is enabled
+property SDA_DRIVE_LOW_WHEN_ENABLED;
+  @(posedge wb_clk_i) (sda_pad_oe == 1'b0) |-> (sda_pad_o == 1'b0);
+endproperty
+assert property (SDA_DRIVE_LOW_WHEN_ENABLED);
+
+// Stability During SCL High: No changes while SCL is high and driving
+property SDA_STABLE_DURING_SCL_HIGH;
+  @(posedge wb_clk_i) 
+  (sda_pad_oe == 1'b0 && $rose(scl_pad_i)) |=> 
+    $stable(sda_pad_o) throughout (scl_pad_i[->1]);
+endproperty
+assert property (SDA_STABLE_DURING_SCL_HIGH);
+
+// Protocol Compliance: Never drive high during SCL high
+property NO_SDA_HIGH_DURING_SCL_HIGH;
+  @(posedge wb_clk_i) 
+  (scl_pad_i == 1'b1) |-> !(sda_pad_oe == 1'b0 && sda_pad_o == 1'b1);
+endproperty
+assert property (NO_SDA_HIGH_DURING_SCL_HIGH);
+
+// START Condition: SDA driven low during SCL high after STA command
+property START_CONDITION_SDA_LOW;
+  @(posedge wb_clk_i) 
+  ($past(cr[STA]) && !$past(sr[BUSY])) |-> 
+    ##[1:5] (sda_pad_oe == 1'b0 && sda_pad_o == 1'b0 && scl_pad_i == 1'b1);
+endproperty
+assert property (START_CONDITION_SDA_LOW);
+```  
+
+**Key Guarantees**:  
+1. **Structural Correctness**: Enforces 1-bit width and open-drain behavior.  
+2. **Protocol Adherence**: Prevents illegal transitions and ensures stability during critical phases.  
+3. **State Awareness**: Explicitly validates START condition timing using Command/Status registers.

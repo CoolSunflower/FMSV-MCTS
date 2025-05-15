@@ -1,0 +1,143 @@
+<think>
+Okay, I need to extract all unique and valid assertions related to the signal mtimecmp from the given list. Let me look at the provided SystemVerilog assertions.
+
+First, the user mentioned to focus on the signal name mtimecmp. The assertions given are:
+
+1. mtimecmp_intr_p: Checks that when mtime is >= mtimecmp[0], the interrupt intr[0] is asserted.
+2. mtimecmp_no_intr_p: Ensures that if mtime is less than mtimecmp[0], intr[0] is not asserted.
+3. mtimecmp_stable_p: Verifies that mtimecmp remains stable when active is high, except during reset.
+
+The user also wants to ensure that assertions about the width of mtimecmp are present. The documentation mentions that mtimecmp is a 64-bit register. However, in the provided assertions, mtimecmp is indexed as mtimecmp[0], which might imply it's an array. Wait, the documentation says each hart has a set of registers. Since the current IP is fixed to one hart and one timer per hart, maybe mtimecmp is an array with one element. But according to the RISC-V spec, mtimecmp is a 64-bit register. The existing assertions don't check the width, so I need to add that.
+
+So, I should create an assertion that checks mtimecmp's width. For example, checking that mtimecmp is 64 bits wide. But how to express that in SystemVerilog? Maybe using $bits(mtimecmp[0]) == 64.
+
+But wait, the existing assertions don't have this. The user says if width assertion is missing, add it. Since the current list doesn't include a width check, I need to include that as a new assertion.
+
+Wait, the problem states "Extract all unique and valid assertions from this list" but also "add that assertion if missing". So the existing assertions from the list must be retained, and if any width-related assertions are missing, add them. However, the user provided three assertions, none of which check the width. Therefore, I need to include a new assertion for the width of mtimecmp.
+
+But the user's instructions say to extract assertions from the list provided, but also to add width assertions if missing. So combining both steps.
+
+Wait, the original question says: "Extract all unique and valid assertions from this list for the signal name: mtimecmp. Ensure that you maximise the number of retained assertions!! [...] add that assertion if missing."
+
+So first, extract from the given list, then check if any required assertions (like width) are missing. The user wants all possible valid assertions, including any missing ones for width.
+
+But the problem is the user provided only three assertions. Let me check each for validity and uniqueness.
+
+The three given assertions are all for mtimecmp. They check the interrupt condition when mtime >= mtimecmp, no interrupt when less, and stability when active. These are all valid. Now, are there any duplicates? Each has a different property, so unique.
+
+Additionally, the width assertion is missing. The documentation says mtimecmp is 64-bit. So an assertion to check that mtimecmp is 64 bits wide. For example:
+
+property mtimecmp_width_p;
+  @(posedge clk_i) disable iff (!rst_ni)
+    $bits(mtimecmp[0]) == 64;
+endproperty
+assert property (mtimecmp_width_p);
+
+But I need to check if the signal is named mtimecmp as a 64-bit register. Alternatively, maybe in the design, mtimecmp could be a multi-dimensional array, but according to the documentation, each hart has its own mtimecmp. Since the current IP is fixed to one hart and one timer, mtimecmp[0] would refer to the 64-bit value for that hart.
+
+But in the provided assertions, mtimecmp is indexed as [0], implying it's an array of 64-bit registers. Therefore, the actual width of each element should be 64 bits.
+
+Therefore, the width assertion is necessary. So adding that as a fourth assertion.
+
+Wait, but the user's example assertions given do not include a width check. So according to the instructions, I need to return all the unique ones from the list provided and add any missing ones (width). Therefore, the answer should include the three existing ones plus a new one for width.
+
+But the user instructions say "Extract all unique and valid assertions from this list for the signal name: mtimecmp", which would be the three given. Then, "add that assertion if missing" for width. So I need to add a width assertion if it's not present in the provided list. Since it's not present, I should include it.
+
+But the user is very strict about not modifying the existing assertions. So existing three assertions are retained as they are, and a new assertion for width is added.
+
+But the user's very first instruction says "Extract all unique and valid assertions from this list" and then later "add that assertion if missing". So perhaps the process is: from the given list, extract all that are relevant to mtimecmp (which are the three), then check if any necessary assertions (like width) are missing and add them.
+
+Therefore, the final answer should include the three original ones plus the width assertion.
+
+But in the provided assertions, there are three. So, first, check if any of the given ones are duplicates. Looking at them:
+
+1. mtimecmp_intr_p: (mtime >= mtimecmp[0]) |-> intr[0];
+2. mtimecmp_no_intr_p: (mtime < mtimecmp[0]) |-> !intr[0];
+3. mtimecmp_stable_p: active |-> $stable(mtimecmp);
+
+These are all unique.
+
+Now, the user says "maximise the number of retained assertions". So we need to include all of them as they are. But also add any missing. Since the width assertion is missing, it must be added.
+
+Therefore, the answer should include the three original assertions and the new width assertion. But how is the width of mtimecmp checked? Since each mtimecmp entry is 64 bits, but in the code, if mtimecmp is an array of 64-bit entries, then each element should be 64 bits.
+
+So the assertion for width would be checking that the width of each element in mtimecmp is 64 bits. So in SystemVerilog:
+
+property mtimecmp_width_p;
+  @(posedge clk_i) disable iff (!rst_ni)
+    $bits(mtimecmp[0]) == 64;
+endproperty
+assert property (mtimecmp_width_p);
+
+But this is a new assertion not present in the user's list. Therefore, this needs to be added.
+
+But the user's example input did not include this. However, according to the problem statement, we need to ensure that assertions for width are present. So, in the final answer, we must include this.
+
+Therefore, the final set of assertions includes the three original ones plus the new width assertion. However, the user said "Extract all unique and valid assertions from this list", but also to add width assertion if missing. So this is a bit conflicting. But following the instructions, I have to add the width assertion.
+
+But wait, the problem says "Extract all unique and valid assertions from this list for the signal name: mtimecmp. Ensure that you maximise the number of retained assertions!! This maximisation is of utmost importance." So maybe the user's primary instruction is to retain as many as possible from the given list, and if any required assertions (like width) are missing, add them. The user says "maximise the number of retained assertions" which implies keeping all possible from the given list, and adding any missing.
+
+In the given list, all three assertions are related to mtimecmp and unique. So we retain all three. Then, add the width assertion.
+
+Therefore, the answer includes the three original assertions plus the width assertion.
+
+But in the user's sample input, the provided assertions did not include a width check. So the answer must include four assertions: the three original ones plus the new one. However, the user's initial list may not have any width assertions, but according to the instructions, we must add it if missing.
+
+But wait, the user provided SystemVerilog assertions:
+
+['property mtimecmp_intr_p;\n  @(posedge clk_i) disable iff (!rst_ni || !active)\n    (mtime >= mtimecmp[0]) |-> intr[0];\nendproperty\nassert property (mtimecmp_intr_p);', 
+ 'property mtimecmp_no_intr_p;\n  @(posedge clk_i) disable iff (!rst_ni || !active)\n    (mtime < mtimecmp[0]) |-> !intr[0];\nendproperty\nassert property (mtimecmp_no_intr_p);', 
+ 'property mtimecmp_stable_p;\n  @(posedge clk_i) disable iff (!rst_ni)\n    active |-> $stable(mtimecmp);\nendproperty\nassert property (mtimecmp_stable_p);']
+
+These three. So in the final answer, these three are included, and the new width assertion is added.
+
+So the answer would have four assertions. But the user said "extract all unique and valid assertions from this list" and "add that assertion if missing".
+
+But perhaps the user is expecting only the three given ones because maybe no width assertion was provided. However, the instructions explicitly state to add the width assertion if missing. So even if it's not in the original list, we need to include it.
+
+Therefore, the final answer includes the three original assertions and one new width assertion.
+
+But wait, how to write the width assertion? Let's see. Since in the documentation, mtimecmp is a 64-bit register. The existing SystemVerilog code uses mtimecmp[0], implying it's an array. Each element of the array is 64 bits. Therefore, the assertion should check the width of mtimecmp[0].
+
+So:
+
+property mtimecmp_width_p;
+  @(posedge clk_i) disable iff (!rst_ni)
+    $bits(mtimecmp[0]) == 64;
+endproperty
+assert property (mtimecmp_width_p);
+
+This would check that the width of each mtimecmp entry is 64 bits.
+
+So including that, the answer would have four assertions.
+
+But the original problem says "Extract all unique and valid assertions from this list" and then "add that assertion if missing". So this may require that even though the user didn't list the width assertion, we need to include it.
+
+Therefore, the final answer should have all three provided assertions and the added width assertion.
+</think>
+
+```systemverilog
+property mtimecmp_intr_p;
+  @(posedge clk_i) disable iff (!rst_ni || !active)
+    (mtime >= mtimecmp[0]) |-> intr[0];
+endproperty
+assert property (mtimecmp_intr_p);
+
+property mtimecmp_no_intr_p;
+  @(posedge clk_i) disable iff (!rst_ni || !active)
+    (mtime < mtimecmp[0]) |-> !intr[0];
+endproperty
+assert property (mtimecmp_no_intr_p);
+
+property mtimecmp_stable_p;
+  @(posedge clk_i) disable iff (!rst_ni)
+    active |-> $stable(mtimecmp);
+endproperty
+assert property (mtimecmp_stable_p);
+
+property mtimecmp_width_p;
+  @(posedge clk_i) disable iff (!rst_ni)
+    $bits(mtimecmp[0]) == 64;
+endproperty
+assert property (mtimecmp_width_p);
+```

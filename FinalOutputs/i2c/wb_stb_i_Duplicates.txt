@@ -1,0 +1,39 @@
+localparam ARST_LVL = 1'b0;
+property wb_stb_reset_inactive;
+  @(posedge wb_clk_i) (wb_rst_i || (arst_i ^ ARST_LVL)) |-> !wb_stb_i;
+endproperty
+assert property (wb_stb_reset_inactive);
+
+localparam ARST_LVL = 1'b0;
+property wb_stb_cyc_connectivity;
+  @(posedge wb_clk_i) wb_stb_i |-> wb_cyc_i;
+endproperty
+assert property (wb_stb_cyc_connectivity);
+
+localparam ARST_LVL = 1'b0;
+property wb_stb_ack_response;
+  @(posedge wb_clk_i) (wb_stb_i && wb_cyc_i) |-> ##2 wb_ack_o;
+endproperty
+assert property (wb_stb_ack_response);
+
+localparam ARST_LVL = 1'b0;
+property wb_input_stability;
+  @(posedge wb_clk_i) disable iff (wb_rst_i || (arst_i ^ ARST_LVL))
+  (wb_stb_i && wb_cyc_i) |-> 
+    ($stable(wb_adr_i) && $stable(wb_dat_i) && $stable(wb_we_i)) throughout ##[0:2] wb_ack_o;
+endproperty
+assert property (wb_input_stability);
+
+localparam ARST_LVL = 1'b0;
+property wb_stb_retention;
+  @(posedge wb_clk_i) disable iff (wb_rst_i || (arst_i ^ ARST_LVL))
+  (wb_stb_i && wb_cyc_i) |-> wb_stb_i throughout ##2 wb_ack_o;
+endproperty
+assert property (wb_stb_retention);
+
+localparam ARST_LVL = 1'b0;
+property wb_stb_width;
+  @(posedge wb_clk_i) $bits(wb_stb_i) == 1;
+endproperty
+assert property (wb_stb_width);
+

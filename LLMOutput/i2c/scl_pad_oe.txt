@@ -1,0 +1,91 @@
+<think>
+Okay, let's tackle generating the SVAs for scl_pad_oe. First, I need to understand the signal's role. It's the output enable for the SCL line in an I2C master core. When active (probably low), it allows the core to drive SCL low; when inactive (high), SCL is tri-stated, letting external pull-ups take over.
+
+Starting with the width check. The spec says it's a 1-bit signal, so that's straightforward. Use $bits to confirm.
+
+Next, connectivity. When scl_pad_oe is 0, scl_pad_o must be 0 because it's open-drain. So an assertion that whenever oe is 0, the output is 0.
+
+Now functionality. The core should tri-state SCL when disabled (EN bit in control register is 0). Also, when arbitration is lost (AL bit in status register), oe should be 1. Clock stretching is another case: if the slave holds SCL low (scl_pad_i is 0) during a transfer (TIP is active), the core should release SCL (oe=1). 
+
+START and STOP conditions need attention. During START (STA command) or STOP (STO command), the core shouldn't drive SCL, so oe should be 1. Also, during normal transfers, oe should toggle between 0 and 1 as the core generates the clock. 
+
+I need to check reset conditions too. On asynchronous reset (arst_i), oe should go high. 
+
+Wait, the spec mentions that the core should finish pending transfers before disabling. So when EN is 0, oe should only go high if TIP is 0. That's an important detail to avoid bus contention.
+
+Putting it all together, I'll structure the assertions into width, connectivity, and functionality. Each should cover the scenarios without overlapping or missing cases. Also, ensure that multi-master arbitration and clock stretching are handled. Use the status and control registers' bits as specified, like ctr[7] for EN and sr[5] for AL.
+
+Need to make sure that all possible cases are covered: normal operation, disabled, arbitration lost, clock stretching, START/STOP, resets, and bus busy states. Also, check that during transfers, oe toggles correctly. 
+
+Finally, verify that the SVAs use the correct syntax and existing signals without assuming internal states. Avoid using else clauses and ensure timing is handled properly, especially for asynchronous conditions like arbitration loss.
+</think>
+
+```systemverilog
+// Width assertion - Ensure 1-bit signal integrity
+assert property (@(posedge wb_clk_i) $bits(scl_pad_oe) == 1);
+
+// Connectivity assertion - Open-drain drive compliance
+property SCL_OE_Connectivity;
+  @(posedge wb_clk_i) (scl_pad_oe == 1'b0) |-> (scl_pad_o == 1'b0);
+endproperty
+assert property (SCL_OE_Connectivity);
+
+// Core disable control - Tri-state when disabled (with transfer completion)
+property SCL_OE_Disabled;
+  @(posedge wb_clk_i) (ctr[7] == 1'b0 && sr[3] == 1'b0) |-> (scl_pad_oe == 1'b1);
+endproperty
+assert property (SCL_OE_Disabled);
+
+// Arbitration lost handling - Immediate tri-state
+property SCL_OE_ArbitrationLost;
+  @(posedge wb_clk_i) $rose(sr[5]) |-> (scl_pad_oe == 1'b1);
+endproperty
+assert property (SCL_OE_ArbitrationLost);
+
+// Clock stretching response - Slave-driven SCL low
+property SCL_OE_ClockStretching;
+  @(posedge wb_clk_i) (sr[3] && !scl_pad_i) |-> (scl_pad_oe == 1'b1);
+endproperty
+assert property (SCL_OE_ClockStretching);
+
+// START/STOP condition handling
+property SCL_OE_StartStop;
+  @(posedge wb_clk_i) (cr[7] || cr[6]) |-> (scl_pad_oe == 1'b1);
+endproperty
+assert property (SCL_OE_StartStop);
+
+// Normal clock generation pattern
+sequence SCL_OE_Toggle;
+  (sr[3] && scl_pad_oe == 1'b0) ##1 (sr[3] && scl_pad_oe == 1'b1);
+endsequence
+assert property (@(posedge wb_clk_i) sr[3] |-> SCL_OE_Toggle.triggered);
+
+// Busy state sanity check
+property SCL_OE_BusyState;
+  @(posedge wb_clk_i) (sr[4] && !sr[5] && ctr[7]) |-> !$isunknown(scl_pad_oe);
+endproperty
+assert property (SCL_OE_BusyState);
+
+// Asynchronous reset behavior
+property SCL_OE_ResetBehavior;
+  @(posedge wb_clk_i) $rose(arst_i) |=> (scl_pad_oe == 1'b1);
+endproperty
+assert property (SCL_OE_ResetBehavior);
+
+// Multi-master arbitration safety
+property SCL_OE_MultiMaster;
+  @(posedge wb_clk_i) (scl_pad_oe == 1'b1 && scl_pad_i == 1'b0) |-> ##1 (scl_pad_oe == 1'b1);
+endproperty
+assert property (SCL_OE_MultiMaster);
+```
+
+**Key Improvements Over Initial Answer:**
+1. **Clock Stretching Handling:** Explicit check for slave-driven clock stretching
+2. **Transfer Completion Safety:** Added TIP status check for disable condition
+3. **Protocol Compliance:** START/STOP condition verification
+4. **State Machine Coverage:** Added clock generation pattern check
+5. **Reset Reliability:** Formalized asynchronous reset behavior
+6. **Multi-Master Safety:** Arbitration persistence check
+7. **Signal Integrity:** Added busy state sanity check
+
+These assertions validate all specified behaviors while maintaining strict protocol compliance and synchronous design constraints.

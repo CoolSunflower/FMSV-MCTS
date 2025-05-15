@@ -1,0 +1,91 @@
+assert property (@(posedge wb_clk_i) $bits(rxr) == 8);
+
+property p_rxr_write_protect;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  (wb_adr_i == 3 && wb_we_i && wb_stb_i && wb_cyc_i) |-> (rxr == $past(rxr));
+endproperty
+assert property (p_rxr_write_protect);
+
+property p_rxr_reset;
+  @(posedge wb_clk_i) disable iff (arst_i != ARST_LVL)
+  (arst_i == ARST_LVL || wb_rst_i) |=> (rxr == 8'h00);
+endproperty
+assert property (p_rxr_reset);
+
+property p_rxr_update_after_read;
+  @(posedge wb_clk_i) disable iff (arst_i == ARST_LVL || wb_rst_i)
+  $rose(sr[0]) && !sr[3] |=> !$stable(rxr);
+endproperty
+assert property (p_rxr_update_after_read);
+
+property p_rxr_write_protect;
+  @(posedge wb_clk_i) 
+  disable iff (wb_rst_i || arst_i != !ARST_LVL)
+  (wb_adr_i == 3 && wb_we_i && wb_stb_i && wb_cyc_i) 
+  |=> 
+  (rxr == $past(rxr));
+endproperty
+assert property (p_rxr_write_protect);
+
+property p_rxr_reset;
+  @(posedge wb_clk_i) 
+  (arst_i == !ARST_LVL || $past(wb_rst_i)) 
+  |=> 
+  (rxr == 8'h00);
+endproperty
+assert property (p_rxr_reset);
+
+property p_rxr_write_protect;
+  @(posedge wb_clk_i) disable iff (wb_rst_i || arst_i == ARST_LVL)
+  (wb_adr_i == 3 && wb_we_i && wb_stb_i && wb_cyc_i) |=> (rxr == $past(rxr));
+endproperty
+assert property (p_rxr_write_protect);
+
+property p_rxr_reset;
+  @(posedge wb_clk_i) disable iff (arst_i != ARST_LVL)
+  (wb_rst_i || arst_i == ARST_LVL) |=> (rxr == 8'h00);
+endproperty
+assert property (p_rxr_reset);
+
+property p_rxr_read_update;
+  @(posedge wb_clk_i) disable iff (wb_rst_i || arst_i == ARST_LVL)
+  ($past(cr[2]) && $rose(sr[0]) && !sr[3]) |-> (rxr != $past(rxr, 2));
+endproperty
+assert property (p_rxr_read_update);
+
+property p_rxr_write_protect;
+  @(posedge wb_clk_i) disable iff (wb_rst_i || arst_i != !ARST_LVL)
+  (wb_adr_i == 3 && wb_we_i && wb_stb_i && wb_cyc_i) |=> (rxr == $past(rxr));
+endproperty
+assert property (p_rxr_write_protect);
+
+property p_rxr_reset;
+  @(posedge wb_clk_i) disable iff (arst_i == !ARST_LVL)
+  (wb_rst_i) |=> (rxr == 8'h00);
+endproperty
+assert property (p_rxr_reset);
+
+property p_rxr_update_after_read;
+  @(posedge wb_clk_i) disable iff (wb_rst_i || arst_i != !ARST_LVL)
+  $rose(sr[0]) && !sr[3] |=> !$stable(rxr);
+endproperty
+assert property (p_rxr_update_after_read);
+
+localparam ARST_LVL = 1'b0;
+property p_rxr_read_update;
+  @(posedge wb_clk_i) 
+  disable iff (arst_i == ARST_LVL || wb_rst_i)
+  ($past(cr[2]) && $rose(sr[0]) && !sr[3]) |-> !$isunknown(rxr);
+endproperty
+assert property (p_rxr_read_update);
+
+localparam ARST_LVL = 1'b0;
+property p_rxr_valid_after_read;
+  @(posedge wb_clk_i) 
+  disable iff (arst_i == ARST_LVL || wb_rst_i)
+  ($fell(sr[3]) && $rose(sr[0])) // Transfer completion
+  |->
+  !$isunknown(rxr);
+endproperty
+assert property (p_rxr_valid_after_read);
+

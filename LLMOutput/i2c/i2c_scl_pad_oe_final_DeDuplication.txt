@@ -1,0 +1,129 @@
+<think>
+Okay, let's tackle this problem step by step. The user wants me to extract all unique and valid SystemVerilog assertions related to the signal `scl_pad_oe` from the provided list, making sure to maximize the number retained. They also mentioned including a check for the signal's width if it's missing.
+
+First, I'll go through each assertion in the list and see which ones are relevant to `scl_pad_oe`.
+
+1. **First assertion**: `assert property (@(posedge wb_clk_i) $bits(scl_pad_oe) == 1);`  
+   This checks that the width of `scl_pad_oe` is 1 bit. Important to include as per the user's note about width.
+
+2. **Second assertion**: `assert property (@(posedge wb_clk_i) sr[3] |-> SCL_OE_Toggle.triggered);`  
+   This refers to the `SCL_OE_Toggle` property, which is defined later. Need to include the actual `SCL_OE_Toggle` property from the list.
+
+3. **Third assertion**: The `SCL_OE_Connectivity` property checks that when `scl_pad_oe` is low, `scl_pad_o` is also low. This is a valid check for connectivity.
+
+4. **Fourth assertion**: `SCL_OE_ClockStretch` checks that after certain conditions, `scl_pad_oe` becomes high within 1 to 5 cycles. Valid.
+
+5. **Fifth assertion**: `SCL_OE_DisabledStates` checks that when the core is disabled or arbitration is lost, `scl_pad_oe` is high. Valid.
+
+6. **Sixth assertion**: `SCL_OE_Toggle` property, which states that when TIP is active and no arbitration loss, the `SCL_DrivePhase` is triggered. Need to check if `SCL_DrivePhase` is defined elsewhere, but since the user said not to modify assertions, include as-is.
+
+7. **SCL_OE_Disabled**: Another check when the core is disabled, ensuring `scl_pad_oe` is high. Similar to fifth but different condition.
+
+8. **SCL_OE_ArbitrationLost**: When arbitration is lost, `scl_pad_oe` should be high.
+
+9. **SCL_OE_ClockStretching**: If TIP is active and SCL is low, `scl_pad_oe` should be high.
+
+10. **SCL_OE_StartStop**: Checks during start/stop commands, `scl_pad_oe` is high. But the condition here is `cr[2] || cr[1]`. Another similar assertion later uses `cr[7] || cr[6]`—needs to check if both are valid.
+
+11. **SCL_OE_MultiMaster**: Ensures that if `scl_pad_oe` is high and SCL is low, it stays high next cycle. Valid for multi-master scenarios.
+
+12. **SCL_OE_Reset**: On reset, `scl_pad_oe` becomes high. There are two versions here, one with `$rose(arst_i) || $rose(wb_rst_i)` and another with just `$rose(arst_i)`. Need to check both.
+
+13. **SCL_OE_ArbitrationPriority**: When core is enabled and arbitration lost, `scl_pad_oe` high.
+
+14. **Another SCL_OE_Disabled**: Combines core disabled and TIP inactive.
+
+15. **SCL_OE_ClockStretch (duplicate)**: Same as fourth but different condition. Wait, in the list, there's another `SCL_OE_ClockStretching` later with similar intent. Need to check for duplicates.
+
+16. **SCL_OE_AsyncReset**: On async reset, `scl_pad_oe` high next cycle.
+
+17. **SCL_OE_Busy**: Checks that `scl_pad_oe` isn't unknown when busy. Important for signal integrity.
+
+Now, I need to eliminate duplicates and ensure all unique ones are included. For example, there are two `SCL_OE_Reset` assertions—one covering both `arst_i` and `wb_rst_i`, another only `arst_i`. The more comprehensive one should be retained. Similarly, check for overlapping properties.
+
+Also, the user mentioned adding a width assertion if missing. The first assertion handles that, so it's included.
+
+Finally, list all unique assertions without modifying their content, even if some might seem redundant. The user emphasized maximizing retained assertions, so even similar ones should be included if they check different conditions.
+</think>
+
+```systemverilog
+// Width assertion
+assert property (@(posedge wb_clk_i) $bits(scl_pad_oe) == 1);
+
+// Connectivity assertions
+property SCL_OE_Connectivity;
+  @(posedge wb_clk_i) (scl_pad_oe == 1'b0) |-> (scl_pad_o == 1'b0);
+endproperty
+assert property (SCL_OE_Connectivity);
+
+// Clock stretching assertions
+property SCL_OE_ClockStretch;
+  @(posedge wb_clk_i) 
+  (sr[3] && !scl_pad_i) |-> ##[1:5] scl_pad_oe == 1'b1;
+endproperty
+assert property (SCL_OE_ClockStretch);
+
+property SCL_OE_ClockStretching;
+  @(posedge wb_clk_i) (sr[1] && !scl_pad_i) |-> (scl_pad_oe == 1'b1);
+endproperty
+assert property (SCL_OE_ClockStretching);
+
+// Disabled state assertions
+property SCL_OE_DisabledStates;
+  @(posedge wb_clk_i)
+  (ctr[7] == 1'b0 || sr[5] == 1'b1) |-> scl_pad_oe == 1'b1;
+endproperty
+assert property (SCL_OE_DisabledStates);
+
+property SCL_OE_Disabled;
+  @(posedge wb_clk_i) (ctr[7] == 1'b0) |-> (scl_pad_oe == 1'b1);
+endproperty
+assert property (SCL_OE_Disabled);
+
+// Arbitration assertions
+property SCL_OE_ArbitrationLost;
+  @(posedge wb_clk_i) (sr[5] == 1'b1) |-> (scl_pad_oe == 1'b1);
+endproperty
+assert property (SCL_OE_ArbitrationLost);
+
+property SCL_OE_ArbitrationPriority;
+  @(posedge wb_clk_i) (ctr[7] && sr[5]) |-> (scl_pad_oe == 1'b1);
+endproperty
+assert property (SCL_OE_ArbitrationPriority);
+
+// Start/Stop assertions
+property SCL_OE_StartStop;
+  @(posedge wb_clk_i) (cr[2] || cr[1]) |-> (scl_pad_oe == 1'b1);
+endproperty
+assert property (SCL_OE_StartStop);
+
+// Multi-master assertion
+property SCL_OE_MultiMaster;
+  @(posedge wb_clk_i) (scl_pad_oe == 1'b1 && scl_pad_i == 1'b0) |-> ##1 (scl_pad_oe == 1'b1);
+endproperty
+assert property (SCL_OE_MultiMaster);
+
+// Reset assertions
+property SCL_OE_Reset;
+  @(posedge wb_clk_i) $rose(arst_i) || $rose(wb_rst_i) |=> (scl_pad_oe == 1'b1);
+endproperty
+assert property (SCL_OE_Reset);
+
+property SCL_OE_AsyncReset;
+  @(posedge wb_clk_i) $rose(arst_i) |=> (scl_pad_oe == 1'b1);
+endproperty
+assert property (SCL_OE_AsyncReset);
+
+// Toggle and phase assertions
+property SCL_OE_Toggle;
+  @(posedge wb_clk_i)
+  (sr[3] && !sr[5]) |-> SCL_DrivePhase.triggered;
+endproperty
+assert property (SCL_OE_Toggle);
+
+// Busy state assertion
+property SCL_OE_Busy;
+  @(posedge wb_clk_i) (sr[4] && !sr[5] && ctr[7]) |-> !$isunknown(scl_pad_oe);
+endproperty
+assert property (SCL_OE_Busy);
+```

@@ -1,0 +1,124 @@
+<think>
+Okay, let's tackle this. The user provided a list of SystemVerilog assertions for the Command Register (cr) and wants all unique and valid ones extracted. They emphasized not modifying the assertions and ensuring maximum retention, including any missing width checks.
+
+First, I need to go through each assertion in the list and check if it's related to 'cr'. The signal 'cr' is the Command Register, so assertions about its bits, reset values, reserved bits, and command behaviors are relevant.
+
+Looking at the list, I see assertions about the width of 'cr', which is crucial. The first assertion checks if cr is 8 bits wide. That's definitely needed.
+
+Next, there are several assertions about reserved bits (like ReservedBitsZero). These ensure that bits 2:1 are always written as zero. Multiple variations exist, but they all serve the same purpose. I need to include all unique ones, but some might be duplicates. For example, "ReservedBitsZero" and "ReservedBitsZeroWrite" seem similar but check writes and reads. Wait, no—the user specified 'cr' is write-only, so maybe some are redundant. But since the user wants all unique ones, I should include both write and read checks if present.
+
+There's an assertion about IACK clearing the interrupt flag. That's important for functionality. Also, checks for auto-clearing of command bits (STA, STO, RD, WR, IACK) after being set. These are valid as the spec says these bits auto-clear.
+
+Reset value checks, both synchronous and asynchronous, are present. The spec mentions both reset types, so these are necessary.
+
+Some assertions prevent conflicts, like NoRD_WR_Conflict and NoSTA_STO_Conflict. These ensure that conflicting commands aren't issued simultaneously, which aligns with the spec's command register description.
+
+There's a check for the ACK bit being valid during read operations. The spec states ACK is used when receiving, so this assertion makes sense.
+
+I also need to ensure that the width assertion is present. The user mentioned adding it if missing, but in the list, there's already an assertion: 'assert property (@(posedge wb_clk_i) ($bits(cr) == 8));'. So that's covered.
+
+Now, checking for duplicates. For example, "CR_ResetValue_Async" appears multiple times with slight variations, but the correct one should handle both active high and low resets. The one with ARST_LVL parameter covers both cases.
+
+Also, some assertions might be redundant, like "CommandAutoClear" and individual bits' auto-clear properties. But since the user wants all unique ones, I should include them all as they check different aspects.
+
+Finally, ensure that all assertions are correctly formatted and unique. Remove any that are exact duplicates but retain those that check different conditions even if they seem similar.
+</think>
+
+```systemverilog
+// Width assertion
+assert property (@(posedge wb_clk_i) ($bits(cr) == 8));
+
+// Reserved bits handling
+property ReservedBitsZero;
+  @(posedge wb_clk_i) (wb_adr_i == 4'h4 && wb_we_i && wb_cyc_i && wb_stb_i) |-> (wb_dat_i[2:1] == 2'b00);
+endproperty
+assert property (ReservedBitsZero);
+
+property ReservedBitsConnectivity;
+  @(posedge wb_clk_i) 
+  (wb_adr_i == 4'h4 && wb_we_i && wb_cyc_i && wb_stb_i) |=> 
+  (cr[2:1] == 2'b00);
+endproperty
+assert property (ReservedBitsConnectivity);
+
+// Reset values
+property CR_ResetValue_Async;
+  @(posedge wb_clk_i) (arst_i == ARST_LVL) |-> (cr == 8'h00);
+endproperty
+assert property (CR_ResetValue_Async);
+
+property CR_ResetValue_Sync;
+  @(posedge wb_clk_i) wb_rst_i |=> (cr == 8'h00);
+endproperty
+assert property (CR_ResetValue_Sync);
+
+// Command auto-clearing
+property CommandAutoClear;
+  @(posedge wb_clk_i)
+  (wb_adr_i == 4'h4 && wb_we_i && wb_cyc_i && wb_stb_i) |=> 
+  (cr[7:4] == 4'b0 && cr[0] == 0);
+endproperty
+assert property (CommandAutoClear);
+
+// Individual command bit clearing
+property STA_AutoClear;
+  @(posedge wb_clk_i) (wb_adr_i == 4'h4 && wb_we_i && wb_cyc_i && wb_stb_i && wb_dat_i[7]) |=> (cr[7] == 0);
+endproperty
+assert property (STA_AutoClear);
+
+property STO_AutoClear;
+  @(posedge wb_clk_i) (wb_adr_i == 4'h4 && wb_we_i && wb_cyc_i && wb_stb_i && wb_dat_i[6]) |=> (cr[6] == 0);
+endproperty
+assert property (STO_AutoClear);
+
+property RD_AutoClear;
+  @(posedge wb_clk_i) (wb_adr_i == 4'h4 && wb_we_i && wb_cyc_i && wb_stb_i && wb_dat_i[5]) |=> (cr[5] == 0);
+endproperty
+assert property (RD_AutoClear);
+
+property WR_AutoClear;
+  @(posedge wb_clk_i) (wb_adr_i == 4'h4 && wb_we_i && wb_cyc_i && wb_stb_i && wb_dat_i[4]) |=> (cr[4] == 0);
+endproperty
+assert property (WR_AutoClear);
+
+property IACK_AutoClear;
+  @(posedge wb_clk_i) (wb_adr_i == 4'h4 && wb_we_i && wb_cyc_i && wb_stb_i && wb_dat_i[0]) |=> (cr[0] == 0);
+endproperty
+assert property (IACK_AutoClear);
+
+// Interrupt handling
+property IACK_ClearsInterrupt;
+  @(posedge wb_clk_i) (wb_adr_i == 4'h4 && wb_we_i && wb_cyc_i && wb_stb_i && wb_dat_i[0]) |=> (sr[0] == 0);
+endproperty
+assert property (IACK_ClearsInterrupt);
+
+// Command conflicts
+property NoRD_WR_Conflict;
+  @(posedge wb_clk_i) (wb_adr_i == 4'h4 && wb_we_i && wb_cyc_i && wb_stb_i) |-> !(wb_dat_i[5] && wb_dat_i[4]);
+endproperty
+assert property (NoRD_WR_Conflict);
+
+property NoSTA_STO_Conflict;
+  @(posedge wb_clk_i) (wb_adr_i == 4'h4 && wb_we_i && wb_cyc_i && wb_stb_i) |-> !(wb_dat_i[7] && wb_dat_i[6]);
+endproperty
+assert property (NoSTA_STO_Conflict);
+
+// ACK behavior
+property ACK_ValidDuringRead;
+  @(posedge wb_clk_i) (cr[3] && !cr[5]) |-> (sr[3] == 1);
+endproperty
+assert property (ACK_ValidDuringRead);
+
+property ACK_StableDuringRead;
+  @(posedge wb_clk_i) 
+  (cr[5] && $past(cr[5])) |-> $stable(cr[3]);
+endproperty
+assert property (ACK_StableDuringRead);
+
+// Asynchronous reset coverage
+property AsyncResetValue;
+  @(posedge wb_clk_i) 
+  (ARST_LVL == 0 && $fell(arst_i)) || (ARST_LVL == 1 && $rose(arst_i)) |-> (cr == 8'h00);
+endproperty
+assert property (AsyncResetValue);
+```
