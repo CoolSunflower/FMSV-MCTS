@@ -200,7 +200,7 @@ def step(query, weak_answer, history=[]):
     answer,history = get_better_answer(query,weak_answer,hints,history=history)
     return hints,answer,history
 
-def main_loop(query,max_iter=4, historyOG=[]):
+def main_loop(query, max_iter=4, historyOG=[]):
     to_explore = []
     to_explore_reward = {}
     history_bank = {}
@@ -282,7 +282,7 @@ def main_loop(query,max_iter=4, historyOG=[]):
     return hints_list,answers_list,to_explore,to_explore_reward,hints_bank,history_bank,hints_reward_imp_bank,fathers,childs,ucb_bank
 
 def func(signal_name, signal_information, history, spec_name, document_data):
-    query = "Generate SVAs for " + signal_name + ". Here is more information about the signal: " + signal_information
+    query = "Generate SVAs for " + signal_name + ". " + signal_information
     max_iter = 4
 
     hints_list,answers_list,to_explore,to_explore_reward,hints_bank,history_bank,hints_reward_imp_bank,fathers,childs,ucb_bank = main_loop(query, max_iter, history)
@@ -310,11 +310,12 @@ def func(signal_name, signal_information, history, spec_name, document_data):
         'hints_bank':hints_bank,
         'history_bank':history_bank,
     }
-    
+
+
     # Use the entire data to generate a comprehensive set of SVAs using o1-preview
     client = OpenAI(api_key=os.getenv('API_KEY'))
     client.chat.completions.create(
-                model='gpt-4o',
+                model='gpt-4o-mini',
                 messages=[
                     {"role": "system", "content": COMBINER_PROMPT}
                 ],
@@ -322,7 +323,7 @@ def func(signal_name, signal_information, history, spec_name, document_data):
                 timeout=15
             )
     completion = client.chat.completions.create(
-        model = MODEL_NAME,
+        model = 'gpt-4o-mini',
         messages = [
             {"role": "user", "content": f"Combine all this data {data} along with your own reasoning, and produce a set of COMPLETE, CONSISTENT and CORRECT SVAs. Here is the signal name {signal_name}."}
         ],
@@ -337,12 +338,12 @@ if __name__ == '__main__':
     document_data = read_document(pdf)
     df = pd.read_csv("./datasets/info/" + spec_name + '.csv')
 
-    create_clients()
+    # create_clients()
 
     history = []
     history.append([document_data + df.loc[0, 'information']])
     history.append([document_data + df.loc[0, 'information']])
 
-    df.loc[6:7, 'output'] = df.loc[6:7].apply(lambda row: func(row['signal_name'], row['information'], history, row['spec_name'], document_data), axis=1)
+    df.loc[6:6, 'output'] = df.loc[6:6].apply(lambda row: func(row['signal_name'], row['information'], history, row['spec_name'], document_data), axis=1)
     
     df.to_csv(f'./output/{spec_name}.csv')
